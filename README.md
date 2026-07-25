@@ -1,0 +1,2 @@
+# TikrView
+Minimal stock viewer
