@@ -207,9 +207,8 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
             )
 
         for ref in ind.reference_lines:
-            fig.add_hline(y=ref, line_dash="dash", row=panel_row, col=1)
+            fig.add_hline(y=ref, line_dash="dot", line_color="gray", row=panel_row, col=1)
 
-    
     if dark_layout:
         to_dark_layout(fig)
     
