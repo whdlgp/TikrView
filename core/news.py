@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 import requests
 import feedparser
 
-from market_client import get_ticker_info
+from .market_client import get_ticker_info
 
 
 class ETFHoldingsClient:
