@@ -7,5 +7,7 @@ dependencies = [
     "dash-bootstrap-components>=2.0.4",
     "feedparser>=6.0.12",
     "plotly>=6.9.0",
+    "pywebview>=6.2.1",
+    "waitress>=3.0.2",
     "yfinance>=1.5.2",
 ]

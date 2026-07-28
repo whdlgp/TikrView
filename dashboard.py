@@ -25,6 +25,9 @@ Then open http://127.0.0.1:8050 in a browser.
 
 import traceback
 
+import threading
+import webview
+from waitress import serve
 import dash
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
@@ -833,5 +836,16 @@ def load_news(n_clicks_list, theme):
     return result
 
 
+def run_server():
+    serve(app.server, host="127.0.0.1", port=8050)
+
 if __name__ == "__main__":
-    app.run(debug=True, port=8050)
+    threading.Thread(target=run_server, daemon=True).start()
+
+    webview.create_window(
+        "TikrView",
+        "http://127.0.0.1:8050",
+        width=1600,
+        height=900,
+    )
+    webview.start()
