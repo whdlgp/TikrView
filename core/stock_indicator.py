@@ -50,6 +50,11 @@ class Indicator(ABC):
     panel: Panel
     reference_lines: list[float] = []
 
+    @property
+    def display_name(self) -> str:
+        """Name of indicator"""
+        return type(self).__name__
+
     @abstractmethod
     def calc(self, df: pd.DataFrame) -> pd.Series | tuple[pd.Series, ...]:
         """
@@ -71,6 +76,10 @@ class SMA(Indicator):
 
     def __init__(self, period: int):
         self.period = period
+
+    @property
+    def display_name(self):
+        return f"SMA ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
         return df["Close"].rolling(self.period).mean()
@@ -96,6 +105,10 @@ class KAMA(Indicator):
         self.period = period
         self.fast_period = fast_period
         self.slow_period = slow_period
+
+    @property
+    def display_name(self):
+        return f"KAMA ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
         close = df["Close"]
@@ -136,6 +149,10 @@ class WilliamsR(Indicator):
     def __init__(self, period: int = 14):
         self.period = period
 
+    @property
+    def display_name(self):
+        return f"Williams %R ({self.period})"
+
     def calc(self, df: pd.DataFrame) -> pd.Series:
         high = df["High"].rolling(self.period).max()
         low = df["Low"].rolling(self.period).min()
@@ -172,6 +189,15 @@ class StochRSI(Indicator):
         self.smooth_k = smooth_k
         self.smooth_d = smooth_d
 
+    @property
+    def display_name(self):
+        return (
+            f"StochRSI "
+            f"({self.rsi_period}, "
+            f"{self.stoch_period}, "
+            f"{self.smooth_period})"
+        )
+
     def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         delta = df["Close"].diff()
         gain = delta.where(delta > 0, 0)
@@ -200,6 +226,10 @@ class FisherTransform(Indicator):
 
     def __init__(self, period: int = 10):
         self.period = period
+
+    @property
+    def display_name(self):
+        return f"Fisher ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         import numpy as np

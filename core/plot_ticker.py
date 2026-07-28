@@ -63,7 +63,7 @@ def plot_ticker_thumbnail(ticker: str, date_range: str, time_interval: str, time
     )
 
     if dark_layout:
-        to_dark_layout(fig, title=ticker)
+        to_dark_layout(fig)
 
     return fig
 
@@ -136,7 +136,7 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
     else:
         main_title = f"<b>{ticker}</b>"
 
-    sub_titles = [main_title] + [type(ind).__name__ for ind in sub_indicators]
+    sub_titles = [main_title] + [ind.display_name for ind in sub_indicators]
 
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, row_heights=row_heights, vertical_spacing=0.04, subplot_titles=sub_titles)
 
@@ -182,7 +182,7 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
                     x=df.index,
                     y=series,
                     mode="lines",
-                    name=type(ind).__name__,
+                    name=ind.display_name,
                     line=dict(width=1.3),
                 ),
                 row=1, col=1,
