@@ -293,7 +293,6 @@ def build_summary_card(ticker, theme):
         changes = [None] * 5
 
     price = info.get("currentPrice") or info.get("regularMarketPrice")
-    prev_close = info.get("previousClose")
     currency = info.get("currency") or ""
     name = info.get("longName") or info.get("shortName") or ticker
     exchange = info.get("fullExchangeName") or info.get("exchange") or "N/A"
