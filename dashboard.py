@@ -233,6 +233,7 @@ class StockApp(QMainWindow):
         self.current_symbol = None
         self.cards = {}
         self._dark_theme = True  # default theme is dark_teal.xml
+        self._timezone = "Asia/Seoul"  # default timezone
         self._changes_data = []  # [(label, value), ...] for price changes bar
 
         self.setWindowTitle("TikrView")
@@ -303,6 +304,35 @@ class StockApp(QMainWindow):
 
         row1.addWidget(QLabel("Theme"))
         row1.addWidget(self.theme_combo)
+
+        row1.addSpacing(12)
+
+        self.timezone_combo = QComboBox()
+        self.timezone_combo.addItems([
+            "Asia/Seoul",
+            "Asia/Tokyo",
+            "Asia/Shanghai",
+            "Asia/Hong_Kong",
+            "Asia/Singapore",
+            "Asia/Kolkata",
+            "Europe/London",
+            "Europe/Berlin",
+            "Europe/Paris",
+            "America/New_York",
+            "America/Chicago",
+            "America/Los_Angeles",
+            "America/Toronto",
+            "America/Sao_Paulo",
+            "Australia/Sydney",
+            "Pacific/Auckland",
+            "UTC",
+        ])
+        self.timezone_combo.setCurrentText("Asia/Seoul")
+        self.timezone_combo.setMinimumWidth(140)
+        self.timezone_combo.currentTextChanged.connect(self.change_timezone)
+
+        row1.addWidget(QLabel("Timezone"))
+        row1.addWidget(self.timezone_combo)
 
         row1.addStretch()
 
@@ -562,6 +592,7 @@ class StockApp(QMainWindow):
                 ticker,
                 date_range="5y",
                 time_interval="1mo",
+                timezone=self._timezone,
                 dark_layout=self._dark_theme,
             )
             if fig is not None:
@@ -654,6 +685,7 @@ class StockApp(QMainWindow):
                 chart_type=chart_type,
                 candle_color=candle_color,
                 indicators=indicators if indicators else None,
+                timezone=self._timezone,
                 dark_layout=self._dark_theme,
             )
         except Exception:
@@ -746,6 +778,7 @@ class StockApp(QMainWindow):
                 self.current_symbol,
                 date_range="1y",
                 time_interval="1d",
+                timezone=self._timezone,
             )
             changes = get_price_changes(df)
             labels = ["1D", "1W", "1M", "6M", "1Y"]
@@ -841,6 +874,11 @@ class StockApp(QMainWindow):
             self.update_chart()
             for ticker, card in self.cards.items():
                 self._load_thumbnail_info(ticker, card)
+
+    def change_timezone(self, tz_name):
+        """Update the timezone and refresh all chart data."""
+        self._timezone = tz_name
+        self.update_chart()
 
 
 # ---------------------------------------------------------------------------
