@@ -4,60 +4,27 @@ TikrView Dashboard
 - Simple, synchronous, no threading.
 
 Run:
-    python dashboard_test.py
+    python dashboard.py
 """
 
 import sys
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QDesktopServices
-from PySide6.QtWidgets import (
-    QApplication,
-    QComboBox,
-    QFormLayout,
-    QFrame,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMainWindow,
-    QMenu,
-    QPushButton,
-    QScrollArea,
-    QSizePolicy,
-    QButtonGroup,
-    QRadioButton,
-    QSplitter,
-    QTabWidget,
-    QTextBrowser,
-    QVBoxLayout,
-    QWidget,
-)
+
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QFormLayout, QSplitter, QScrollArea
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QRadioButton, QButtonGroup
+from PySide6.QtWidgets import QGroupBox, QFrame, QTabWidget, QTextBrowser, QSizePolicy, QMenu
 
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from qt_material import apply_stylesheet, list_themes
 
-from core.market_client import (
-    get_ticker_data,
-    get_ticker_info,
-)
-
-from core.plot_ticker import (
-    ChartType,
-    CandleColor,
-    plot_ticker_chart,
-    plot_ticker_thumbnail,
-)
-
+from core.market_client import get_ticker_data, get_ticker_info
+from core.plot_ticker import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
 from core.stock_indicator import get_price_changes, parse_indicator
-
-try:
-    from core.news import TickerNewsClient
-
-    NEWS_AVAILABLE = True
-except Exception:
-    NEWS_AVAILABLE = False
+from core.news import TickerNewsClient
 
 
 DEFAULT_TICKERS = [
@@ -295,19 +262,13 @@ class StockApp(QMainWindow):
         self.theme_combo.currentTextChanged.connect(self.change_theme)
 
         self.range_combo = QComboBox()
-        self.range_combo.addItems([
-            "1d", "5d", "1mo", "3mo", "6mo",
-            "1y", "2y", "5y", "10y", "max",
-        ])
+        self.range_combo.addItems(["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"])
         self.range_combo.setCurrentText("1y")
         self.range_combo.setMinimumWidth(70)
         self.range_combo.currentIndexChanged.connect(self.update_chart)
 
         self.interval_combo = QComboBox()
-        self.interval_combo.addItems([
-            "1m", "5m", "15m", "30m",
-            "1h", "1d", "1wk", "1mo",
-        ])
+        self.interval_combo.addItems(["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"])
         self.interval_combo.setCurrentText("1d")
         self.interval_combo.setMinimumWidth(70)
         self.interval_combo.currentIndexChanged.connect(self.update_chart)
@@ -318,9 +279,7 @@ class StockApp(QMainWindow):
         self.chart_combo.currentIndexChanged.connect(self.update_chart)
 
         self.color_combo = QComboBox()
-        self.color_combo.addItems(
-            [color.name.title() for color in CandleColor]
-        )
+        self.color_combo.addItems([color.name.title() for color in CandleColor])
         self.color_combo.setMinimumWidth(130)
         self.color_combo.currentIndexChanged.connect(self.update_chart)
 
@@ -832,14 +791,6 @@ class StockApp(QMainWindow):
 
         self.news_button.setEnabled(False)
         self.news_button.setText("Loading...")
-
-        if not NEWS_AVAILABLE:
-            self.news_browser.setHtml(
-                "<p style='color:#888;'><i>News module not available.</i></p>"
-            )
-            self.news_button.setEnabled(True)
-            self.news_button.setText("Load News")
-            return
 
         try:
             with TickerNewsClient() as client:
