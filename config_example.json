@@ -1,0 +1,34 @@
+{
+    "theme": "dark_teal.xml",
+    "timezone": "Asia/Seoul",
+
+    "window_width": 1650,
+    "window_height": 920,
+
+    "tickers": [
+        "SPY",
+        "QQQ",
+        "SCHD",
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "TSLA",
+        "GOOGL",
+        "005930.KS",
+        "000660.KS",
+        "GLD"
+    ],
+
+    "range": "1y",
+    "interval": "1d",
+
+    "chart_type": "Candlestick",
+    "candle_color": "Red_Blue",
+
+    "indicators": [
+        "SMA:20",
+        "SMA:60",
+        "VWAP",
+        "Fisher:10"
+    ]
+}
