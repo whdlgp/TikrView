@@ -1,129 +1,81 @@
 """
 TikrView Dashboard
-- Dash-based GUI dashboard that wraps the existing core/ modules
-  (market_client, plot_ticker, stock_indicator, news) into a
-  single-file interactive app.
-
-Place this file at the project root, next to cli.py:
-
-    TikrView/
-    +-- core/
-    |     +-- market_client.py
-    |     +-- news.py
-    |     +-- plot_ticker.py
-    |     +-- stock_indicator.py
-    +-- cli.py
-    +-- dashboard.py   <- this file
-
-Install (if needed):
-    pip install dash dash-bootstrap-components plotly pandas yfinance feedparser requests
+- PySide6 GUI wrapping the core/ modules (market_client, plot_ticker, stock_indicator, news).
+- Simple, synchronous, no threading.
 
 Run:
-    python dashboard.py
-Then open http://127.0.0.1:8050 in a browser.
+    python dashboard_test.py
 """
 
-import traceback
+import sys
 
-import threading
-import webview
-from waitress import serve
-import dash
-import dash_bootstrap_components as dbc
-import plotly.graph_objects as go
-from dash import dcc, html, Input, Output, State, ALL, ctx, no_update
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QButtonGroup,
+    QRadioButton,
+    QSplitter,
+    QTabWidget,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
-from core.market_client import get_ticker_data, get_ticker_info
-from core.plot_ticker import plot_ticker_thumbnail, plot_ticker_chart, ChartType, CandleColor, to_dark_layout
-from core.stock_indicator import parse_indicator, get_price_changes
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+from qt_material import apply_stylesheet, list_themes
+
+from core.market_client import (
+    get_ticker_data,
+    get_ticker_info,
+)
+
+from core.plot_ticker import (
+    ChartType,
+    CandleColor,
+    plot_ticker_chart,
+    plot_ticker_thumbnail,
+)
+
+from core.stock_indicator import get_price_changes, parse_indicator
 
 try:
     from core.news import TickerNewsClient
-    _NEWS_AVAILABLE = True
+
+    NEWS_AVAILABLE = True
 except Exception:
-    _NEWS_AVAILABLE = False
+    NEWS_AVAILABLE = False
 
 
-# ---------------------------------------------------------------------------
-# Constants / defaults
-# ---------------------------------------------------------------------------
-
-DEFAULT_TICKERS = "BND,SGOL,QQQM,VYMI,SPYM,SCHF,JEPI,SCHD,PFF,DWX,AGNC,441640.KS,UVXY,USDKRW=X"
-
-THUMBNAIL_RANGE = "5y"
-THUMBNAIL_INTERVAL = "1mo"
-
-RANGE_OPTIONS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
-INTERVAL_OPTIONS = ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]
-CHANGE_LABELS = ["1D", "1W", "1M", "6M", "1Y"]
-
-TIMEZONE_OPTIONS = [
-    "Asia/Seoul", "Asia/Tokyo", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Singapore",
-    "Europe/London", "Europe/Berlin", "Europe/Paris",
-    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-    "UTC",
+DEFAULT_TICKERS = [
+    "BND",
+    "SGOL",
+    "QQQM",
+    "VYMI",
+    "SPYM",
+    "SCHF",
+    "JEPI",
+    "SCHD",
+    "PFF",
+    "DWX",
+    "AGNC",
+    "441640.KS",
+    "UVXY",
+    "USDKRW=X",
 ]
-
-INDICATOR_OPTIONS = [
-    {"label": "SMA 5", "value": "SMA:5"},
-    {"label": "SMA 10", "value": "SMA:10"},
-    {"label": "SMA 20", "value": "SMA:20"},
-    {"label": "SMA 50", "value": "SMA:50"},
-    {"label": "SMA 60", "value": "SMA:60"},
-    {"label": "SMA 120", "value": "SMA:120"},
-    {"label": "SMA 200", "value": "SMA:200"},
-
-    {"label": "VWAP", "value": "VWAP"},
-
-    {"label": "KAMA 10", "value": "KAMA:10"},
-
-    {"label": "Williams %R (14)", "value": "WilliamsR:14"},
-    {"label": "MFI (14)", "value": "MFI:14"},
-    {"label": "StochRSI (14,3,3)", "value": "StochRSI:14,3,3"},
-    {"label": "Fisher (10)", "value": "Fisher:10"},
-]
-DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
-
-THEME_OPTIONS = [{"label": "Dark", "value": "dark"}, {"label": "Light", "value": "light"}]
-
-# Theme palettes. `sparkline` is the single uniform color used for every
-# thumbnail chart (no more red/green coloring by change).
-THEMES = {
-    "dark": {
-        "bg": "#101010",
-        "panel": "#161616",
-        "card": "#1e1e1e",
-        "border": "#2f2f2f",
-        "text": "#e0e0e0",
-        "muted": "#9e9e9e",
-        "muted2": "#666666",
-        "accent": "#26a69a",
-        "down": "#ef5350",
-        "sparkline": "#7ec8e3",
-        "active_bg": "#20302c",
-        "dbc_theme": dbc.themes.DARKLY,
-    },
-    "light": {
-        "bg": "#f4f5f7",
-        "panel": "#ffffff",
-        "card": "#ffffff",
-        "border": "#dfe1e5",
-        "text": "#1a1a1a",
-        "muted": "#666666",
-        "muted2": "#8a8a8a",
-        "accent": "#0f9d84",
-        "down": "#d32f2f",
-        "sparkline": "#3d7bbf",
-        "active_bg": "#e3f2f0",
-        "dbc_theme": dbc.themes.FLATLY,
-    },
-}
-
-DROPDOWN_STYLE = {"color": "#000", "fontSize": "13px", "minWidth": "150px"}
-
-
-def theme_colors(theme):
-    return THEMES.get(theme, THEMES["dark"])
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +83,7 @@ def theme_colors(theme):
 # ---------------------------------------------------------------------------
 
 def _fmt_num(value, digits=2):
+    """Format a number with K/M/B/T suffixes."""
     if value is None:
         return "N/A"
     try:
@@ -145,16 +98,8 @@ def _fmt_num(value, digits=2):
         return "N/A"
 
 
-def _fmt_price(value, currency=""):
-    if value is None:
-        return "N/A"
-    try:
-        return f"{value:,.2f} {currency}".strip()
-    except Exception:
-        return "N/A"
-
-
 def _fmt_pct(value):
+    """Format a percentage value."""
     if value is None:
         return "N/A"
     try:
@@ -163,689 +108,801 @@ def _fmt_pct(value):
         return "N/A"
 
 
-def parse_ticker_list(raw_text):
-    if not raw_text:
-        return []
-    parts = [p.strip().upper() for p in raw_text.replace("\n", ",").split(",")]
-    seen, result = set(), []
-    for p in parts:
-        if p and p not in seen:
-            seen.add(p)
-            result.append(p)
-    return result
-
-
 # ---------------------------------------------------------------------------
-# Thumbnail sidebar
+# Indicator picker widget
 # ---------------------------------------------------------------------------
 
-def build_thumbnail_figure(ticker, theme):
-    """Small sparkline for a thumbnail button, built from the existing
-    plot_ticker_thumbnail() helper (core/plot_ticker.py) rather than
-    duplicating chart-construction logic here. Uniform 5y/1mo view,
-    single color (no red/green by change)."""
-    colors = theme_colors(theme)
+INDICATOR_OPTIONS = [
+    ("SMA 5", "SMA:5"),
+    ("SMA 10", "SMA:10"),
+    ("SMA 20", "SMA:20"),
+    ("SMA 50", "SMA:50"),
+    ("SMA 60", "SMA:60"),
+    ("SMA 120", "SMA:120"),
+    ("SMA 200", "SMA:200"),
+    ("VWAP", "VWAP"),
+    ("KAMA 10", "KAMA:10"),
+    ("Williams %R (14)", "WilliamsR:14"),
+    ("MFI (14)", "MFI:14"),
+    ("StochRSI (14,3,3)", "StochRSI:14,3,3"),
+    ("Fisher (10)", "Fisher:10"),
+]
 
-    fig = plot_ticker_thumbnail(
-        ticker,
-        date_range=THUMBNAIL_RANGE,
-        time_interval=THUMBNAIL_INTERVAL,
-        dark_layout=(theme == "dark"),
-    )
-    if fig is None:
-        fig = go.Figure()
-
-    if fig.data:
-        fig.data[0].line.color = colors["sparkline"]
-        fig.data[0].hoverinfo = "skip"
-
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=0, b=0),
-        showlegend=False,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-    )
-    return fig
+DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
 
 
-def build_thumbnail_meta(ticker):
-    """Return (last_price, currency, pct_change_1d) for the thumbnail label."""
-    try:
-        info = get_ticker_info(ticker)
-    except Exception:
-        info = {}
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    currency = info.get("currency") or ""
-    prev_close = info.get("previousClose")
-    pct = None
-    if price is not None and prev_close:
-        try:
-            pct = (price - prev_close) / prev_close * 100
-        except Exception:
-            pct = None
-    return price, currency, pct
+class IndicatorPicker(QWidget):
+    """Button that opens a menu with checkable indicator options."""
 
+    selection_changed = Signal()
 
-def thumbnail_style(active, theme):
-    colors = theme_colors(theme)
-    return {
-        "backgroundColor": colors["active_bg"] if active else colors["card"],
-        "border": f"1px solid {colors['accent']}" if active else f"1px solid {colors['border']}",
-        "borderRadius": "8px",
-        "padding": "8px 10px",
-        "marginBottom": "8px",
-        "cursor": "pointer",
-        "width": "100%",
-        "boxSizing": "border-box",
-    }
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-def build_thumbnail(ticker, active, theme):
-    colors = theme_colors(theme)
-    fig = build_thumbnail_figure(ticker, theme)
-    price, currency, pct = build_thumbnail_meta(ticker)
+        self._button = QPushButton("Indicators...")
+        self._button.clicked.connect(self._show_menu)
 
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(
-                        ticker,
-                        style={"fontWeight": "700", "fontSize": "13px", "overflow": "hidden",
-                               "textOverflow": "ellipsis", "whiteSpace": "nowrap", "maxWidth": "108px",
-                               "display": "inline-block", "verticalAlign": "bottom", "color": colors["text"]},
-                    ),
-                ],
-                style={"marginBottom": "2px"},
-            ),
-            dcc.Graph(
-                figure=fig,
-                config={"staticPlot": True, "displayModeBar": False},
-                style={"height": "36px", "width": "100%"},
-            ),
-            html.Div(
-                _fmt_price(price, currency),
-                style={"fontSize": "11px", "color": colors["muted"], "marginTop": "2px", "overflow": "hidden",
-                       "textOverflow": "ellipsis", "whiteSpace": "nowrap"},
-            ),
-        ],
-        id={"type": "thumb", "index": ticker},
-        n_clicks=0,
-        style=thumbnail_style(active, theme),
-    )
+        self._menu = QMenu(self)
+        self._actions = {}
 
+        for label, value in INDICATOR_OPTIONS:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setData(value)
+            action.toggled.connect(self._on_toggled)
+            self._menu.addAction(action)
+            self._actions[value] = action
 
-# ---------------------------------------------------------------------------
-# Info card / chart builders
-# ---------------------------------------------------------------------------
+        layout.addWidget(self._button)
 
-def build_summary_card(ticker, theme):
-    colors = theme_colors(theme)
-
-    try:
-        info = get_ticker_info(ticker)
-    except Exception:
-        info = {}
-
-    try:
-        df = get_ticker_data(ticker, date_range="1y", time_interval="1d")
-        changes = get_price_changes(df)
-    except Exception:
-        changes = [None] * 5
-
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    currency = info.get("currency") or ""
-    name = info.get("longName") or info.get("shortName") or ticker
-    exchange = info.get("fullExchangeName") or info.get("exchange") or "N/A"
-    market_state = info.get("marketState") or "N/A"
-    quote_type = info.get("quoteType") or ""
-
-    def change_color(v):
-        return colors["muted"] if v is None else (colors["accent"] if v >= 0 else colors["down"])
-
-    change_badges = [
-        html.Div(
-            [
-                html.Div(label, style={"fontSize": "11px", "color": colors["muted"]}),
-                html.Div(_fmt_pct(val), style={"fontSize": "14px", "fontWeight": "600", "color": change_color(val)}),
-            ],
-            style={"textAlign": "center", "padding": "4px 10px"},
+    def _show_menu(self):
+        self._menu.exec(
+            self._button.mapToGlobal(self._button.rect().bottomLeft())
         )
-        for label, val in zip(CHANGE_LABELS, changes)
-    ]
 
-    basic_section = [
-        ("Exchange", exchange),
-        ("Currency", currency),
-        ("Country", info.get("country") or "N/A"),
-    ]
+    def _on_toggled(self):
+        self._update_label()
+        self.selection_changed.emit()
 
-    quote_type = info.get("quoteType", "")
+    def _update_label(self):
+        selected = self.selected_values()
+        if selected:
+            self._button.setText(", ".join(selected))
+        else:
+            self._button.setText("Indicators...")
 
-    if quote_type == "ETF":
-        info_section = [
-            ("Fund Family", info.get("fundFamily") or "N/A"),
-            ("Category", info.get("category") or "N/A"),
-            ("Net Assets", _fmt_num(info.get("netAssets"))),
-            ("Expense Ratio", _fmt_pct(info.get("netExpenseRatio")) if info.get("netExpenseRatio") is not None else "N/A"),
-            ("Dividend Yield", _fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
-            ("3Y Avg Return", _fmt_pct(info.get("threeYearAverageReturn")) if info.get("threeYearAverageReturn") is not None else "N/A"),
-            ("5Y Avg Return", _fmt_pct(info.get("fiveYearAverageReturn")) if info.get("fiveYearAverageReturn") is not None else "N/A"),
-            ("YTD Return", _fmt_pct(info.get("ytdReturn")) if info.get("ytdReturn") is not None else "N/A"),
+    def selected_values(self):
+        """Return list of checked indicator spec strings."""
+        return [a.data() for a in self._actions.values() if a.isChecked()]
+
+    def set_selected(self, values):
+        """Set checked indicators by value list."""
+        for v, a in self._actions.items():
+            a.setChecked(v in values)
+        self._update_label()
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail card widget
+# ---------------------------------------------------------------------------
+
+class ThumbnailCard(QFrame):
+    """Clickable thumbnail card showing ticker, sparkline chart, price, and daily change."""
+
+    clicked = Signal(str)
+
+    def __init__(self, ticker, parent=None):
+        super().__init__(parent)
+        self.ticker = ticker
+        self._active = False
+
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(180)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(3)
+
+        # Ticker symbol
+        self.ticker_label = QLabel(ticker)
+        font = self.ticker_label.font()
+        font.setBold(True)
+        font.setPointSize(12)
+        self.ticker_label.setFont(font)
+
+        # Sparkline chart
+        self.chart_view = QWebEngineView()
+        self.chart_view.setFixedHeight(115)
+        self.chart_view.page().setBackgroundColor(Qt.transparent)
+
+        # Price + change row
+        row = QHBoxLayout()
+        row.setSpacing(8)
+
+        self.price_label = QLabel("-")
+        self.price_label.setStyleSheet("font-size: 11px;")
+
+        row.addWidget(self.price_label)
+        row.addStretch()
+
+        layout.addWidget(self.ticker_label)
+        layout.addWidget(self.chart_view)
+        layout.addLayout(row)
+
+        self._update_style()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.ticker)
+        super().mousePressEvent(event)
+
+    def set_active(self, active):
+        self._active = active
+        self._update_style()
+
+    def _update_style(self):
+        if self._active:
+            self.setStyleSheet(
+                "ThumbnailCard { border: 2px solid #26a69a; border-radius: 6px; }"
+            )
+        else:
+            self.setStyleSheet(
+                "ThumbnailCard { border: 1px solid #444; border-radius: 6px; }"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Main window
+# ---------------------------------------------------------------------------
+
+class StockApp(QMainWindow):
+
+    def __init__(self):
+        super().__init__()
+
+        self.current_symbol = None
+        self.cards = {}
+        self._dark_theme = True  # default theme is dark_teal.xml
+        self._changes_data = []  # [(label, value), ...] for price changes bar
+
+        self.setWindowTitle("TikrView")
+        self.resize(1650, 920)
+
+        self.build_ui()
+
+        self.apply_tickers(DEFAULT_TICKERS)
+
+    def build_ui(self):
+
+        #
+        # ============================================================
+        # Top Bar
+        # ============================================================
+        #
+
+        self.ticker_edit = QLineEdit(",".join(DEFAULT_TICKERS))
+
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.clicked.connect(self.on_apply_clicked)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(list_themes())
+        self.theme_combo.setCurrentText("dark_teal.xml")
+        self.theme_combo.setMinimumWidth(140)
+        self.theme_combo.currentTextChanged.connect(self.change_theme)
+
+        self.range_combo = QComboBox()
+        self.range_combo.addItems([
+            "1d", "5d", "1mo", "3mo", "6mo",
+            "1y", "2y", "5y", "10y", "max",
+        ])
+        self.range_combo.setCurrentText("1y")
+        self.range_combo.setMinimumWidth(70)
+        self.range_combo.currentIndexChanged.connect(self.update_chart)
+
+        self.interval_combo = QComboBox()
+        self.interval_combo.addItems([
+            "1m", "5m", "15m", "30m",
+            "1h", "1d", "1wk", "1mo",
+        ])
+        self.interval_combo.setCurrentText("1d")
+        self.interval_combo.setMinimumWidth(70)
+        self.interval_combo.currentIndexChanged.connect(self.update_chart)
+
+        self.chart_combo = QComboBox()
+        self.chart_combo.addItems(["Candlestick", "Line"])
+        self.chart_combo.setMinimumWidth(110)
+        self.chart_combo.currentIndexChanged.connect(self.update_chart)
+
+        self.color_combo = QComboBox()
+        self.color_combo.addItems(
+            [color.name.title() for color in CandleColor]
+        )
+        self.color_combo.setMinimumWidth(130)
+        self.color_combo.currentIndexChanged.connect(self.update_chart)
+
+        self.indicator_picker = IndicatorPicker()
+        self.indicator_picker.set_selected(DEFAULT_INDICATORS)
+        self.indicator_picker.selection_changed.connect(self.update_chart)
+
+        top_widget = QWidget()
+        top_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+        top_layout = QVBoxLayout(top_widget)
+
+        row1 = QHBoxLayout()
+
+        row1.addWidget(QLabel("Tickers"))
+        row1.addWidget(self.ticker_edit)
+
+        row1.addWidget(self.apply_button)
+
+        row1.addSpacing(20)
+
+        row1.addWidget(QLabel("Theme"))
+        row1.addWidget(self.theme_combo)
+
+        row1.addStretch()
+
+        top_layout.addLayout(row1)
+
+        #
+        # ============================================================
+        # Thumbnail Panel
+        # ============================================================
+        #
+
+        self.thumbnail_scroll = QScrollArea()
+        self.thumbnail_scroll.setWidgetResizable(True)
+        self.thumbnail_scroll.setMinimumWidth(280)
+
+        self.thumbnail_widget = QWidget()
+
+        self.thumbnail_layout = QVBoxLayout(self.thumbnail_widget)
+        self.thumbnail_layout.setContentsMargins(8, 8, 8, 8)
+        self.thumbnail_layout.setSpacing(8)
+        self.thumbnail_layout.addStretch()
+
+        self.thumbnail_scroll.setWidget(self.thumbnail_widget)
+
+        #
+        # ============================================================
+        # Summary Panel
+        # ============================================================
+        #
+
+        self.summary_group = QGroupBox("Summary")
+
+        summary_layout = QVBoxLayout(self.summary_group)
+
+        self.name_label = QLabel("-")
+        font = self.name_label.font()
+        font.setPointSize(18)
+        font.setBold(True)
+        self.name_label.setFont(font)
+
+        self.price_label = QLabel("-")
+        font = self.price_label.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        self.price_label.setFont(font)
+
+        self.change_label = QLabel("-")
+
+        summary_layout.addWidget(self.name_label)
+        summary_layout.addWidget(self.price_label)
+        summary_layout.addWidget(self.change_label)
+
+        self.info_layout = QFormLayout()
+        summary_layout.addLayout(self.info_layout)
+
+        summary_layout.addStretch()
+
+        #
+        # ============================================================
+        # Chart Panel
+        # ============================================================
+        #
+
+        self.chart_view = QWebEngineView()
+
+        #
+        # ============================================================
+        # News Panel
+        # ============================================================
+        #
+
+        self.news_group = QGroupBox("News")
+
+        news_layout = QVBoxLayout(self.news_group)
+
+        self.news_button = QPushButton("Load News")
+        self.news_button.clicked.connect(self.load_news)
+
+        self.news_browser = QTextBrowser()
+        self.news_browser.setOpenLinks(False)
+        self.news_browser.anchorClicked.connect(
+            QDesktopServices.openUrl
+        )
+
+        news_layout.addWidget(self.news_button)
+        news_layout.addWidget(self.news_browser)
+
+        #
+        # ============================================================
+        # Right Side
+        # ============================================================
+        #
+
+        right_widget = QWidget()
+
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Chart controls bar
+        controls = QVBoxLayout()
+        controls.setSpacing(4)
+
+        # Row: Range radio buttons
+        range_row = QHBoxLayout()
+        range_row.addWidget(QLabel("Range:"))
+        self.range_group = QButtonGroup(self)
+        for label in ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"]:
+            rb = QRadioButton(label)
+            self.range_group.addButton(rb)
+            range_row.addWidget(rb)
+        self.range_group.buttons()[5].setChecked(True)  # "1y"
+        self.range_group.buttonClicked.connect(self.update_chart)
+        range_row.addStretch()
+        controls.addLayout(range_row)
+
+        # Row: Interval radio buttons
+        interval_row = QHBoxLayout()
+        interval_row.addWidget(QLabel("Interval:"))
+        self.interval_group = QButtonGroup(self)
+        for label in ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]:
+            rb = QRadioButton(label)
+            self.interval_group.addButton(rb)
+            interval_row.addWidget(rb)
+        self.interval_group.buttons()[5].setChecked(True)  # "1d"
+        self.interval_group.buttonClicked.connect(self.update_chart)
+        interval_row.addStretch()
+        controls.addLayout(interval_row)
+
+        # Row: Chart type radio + Color dropdown + Indicators
+        type_row = QHBoxLayout()
+        type_row.addWidget(QLabel("Chart:"))
+        self.chart_group = QButtonGroup(self)
+        for label in ["Candlestick", "Line"]:
+            rb = QRadioButton(label)
+            self.chart_group.addButton(rb)
+            type_row.addWidget(rb)
+        self.chart_group.buttons()[0].setChecked(True)
+        self.chart_group.buttonClicked.connect(self.update_chart)
+
+        type_row.addSpacing(16)
+        type_row.addWidget(QLabel("Color:"))
+        type_row.addWidget(self.color_combo)
+        type_row.addSpacing(16)
+        type_row.addWidget(QLabel("Indicators:"))
+        type_row.addWidget(self.indicator_picker)
+        type_row.addStretch()
+        controls.addLayout(type_row)
+
+        # Row: Price changes
+        self.changes_widget = QWidget()
+        self.changes_layout = QHBoxLayout(self.changes_widget)
+        self.changes_layout.setContentsMargins(0, 0, 0, 0)
+        self.changes_layout.setSpacing(16)
+        controls.addWidget(self.changes_widget)
+
+        # Summary + Chart side by side
+        h_splitter = QSplitter(Qt.Horizontal)
+        h_splitter.addWidget(self.summary_group)
+        h_splitter.addWidget(self.chart_view)
+        h_splitter.setStretchFactor(0, 1)  # summary narrow
+        h_splitter.setStretchFactor(1, 4)  # chart wide
+
+        # Chart tab: controls bar + summary/chart splitter
+        chart_tab = QWidget()
+        chart_tab_layout = QVBoxLayout(chart_tab)
+        chart_tab_layout.setContentsMargins(6, 6, 6, 6)
+        chart_tab_layout.addLayout(controls, stretch=0)
+        chart_tab_layout.addWidget(h_splitter, stretch=1)
+
+        # Tab widget: Chart | News
+        self.tab_widget = QTabWidget()
+        self.tab_widget.addTab(chart_tab, "Chart")
+        self.tab_widget.addTab(self.news_group, "News")
+
+        right_layout.addWidget(self.tab_widget)
+
+        #
+        # ============================================================
+        # Main Splitter
+        # ============================================================
+        #
+
+        main_splitter = QSplitter()
+
+        main_splitter.addWidget(self.thumbnail_scroll)
+        main_splitter.addWidget(right_widget)
+
+        main_splitter.setStretchFactor(0, 1)
+        main_splitter.setStretchFactor(1, 4)
+
+        #
+        # ============================================================
+        # Central Widget
+        # ============================================================
+        #
+
+        central = QWidget()
+
+        layout = QVBoxLayout(central)
+
+        layout.addWidget(top_widget, stretch=0)
+        layout.addWidget(main_splitter, stretch=1)
+
+        self.setCentralWidget(central)
+
+    # -----------------------------------------------------------------------
+    # Actions
+    # -----------------------------------------------------------------------
+
+    def apply_tickers(self, tickers):
+        """Populate the thumbnail panel with ticker cards."""
+        # Remove existing cards
+        for card in self.cards.values():
+            card.setParent(None)
+        self.cards.clear()
+
+        # Clear the layout completely
+        while self.thumbnail_layout.count():
+            item = self.thumbnail_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+
+        # Create new cards
+        for ticker in tickers:
+            card = ThumbnailCard(ticker)
+            card.clicked.connect(self.on_thumbnail_clicked)
+            self.cards[ticker] = card
+            self.thumbnail_layout.addWidget(card)
+
+            # Load price info for the card
+            self._load_thumbnail_info(ticker, card)
+
+        # Add stretch at the end so cards stay at the top when there are few
+        self.thumbnail_layout.addStretch()
+
+        # Select the first ticker
+        if tickers:
+            self.on_thumbnail_clicked(tickers[0])
+
+    def _load_thumbnail_info(self, ticker, card):
+        """Load sparkline chart and price for a thumbnail card."""
+        # Price info
+        try:
+            info = get_ticker_info(ticker)
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            currency = info.get("currency", "")
+
+            if price is not None:
+                card.price_label.setText(f"{price:,.2f} {currency}".strip())
+        except Exception:
+            pass
+
+        # Sparkline chart
+        try:
+            fig = plot_ticker_thumbnail(
+                ticker,
+                date_range="5y",
+                time_interval="1mo",
+                dark_layout=self._dark_theme,
+            )
+            if fig is not None:
+                fig.update_layout(
+                    margin=dict(l=0, r=0, t=0, b=0),
+                )
+                fig.update_xaxes(visible=False)
+                fig.update_yaxes(visible=False)
+                html = fig.to_html(
+                    include_plotlyjs="cdn",
+                    config={"staticPlot": True, "displayModeBar": False},
+                )
+                html = html.replace(
+                    "</head>",
+                    "<style>body{background:transparent;margin:0;}</style></head>",
+                )
+                card.chart_view.setHtml(html)
+        except Exception:
+            pass
+
+    def on_apply_clicked(self):
+        """Parse the ticker input field and rebuild thumbnails."""
+        text = self.ticker_edit.text().strip()
+        if not text:
+            return
+        tickers = [
+            t.strip().upper()
+            for t in text.replace("\n", ",").split(",")
+            if t.strip()
         ]
-    else:
-        info_section = [
-            ("Sector", info.get("sector") or "N/A"),
-            ("Industry", info.get("industry") or "N/A"),
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for t in tickers:
+            if t not in seen:
+                seen.add(t)
+                unique.append(t)
+        self.apply_tickers(unique)
+
+    def on_thumbnail_clicked(self, ticker):
+        """Handle thumbnail card click — select a ticker."""
+        self.current_symbol = ticker
+
+        # Highlight the active card
+        for t, card in self.cards.items():
+            card.set_active(t == ticker)
+
+        self.update_chart()
+        self.update_summary()
+        self._fetch_changes_data()
+        self._update_changes_bar()
+
+        # Clear news when switching tickers
+        self.news_browser.setHtml("")
+
+    def update_chart(self, _=None):
+        """Update the main chart view for the current ticker."""
+        if not self.current_symbol:
+            return
+
+        date_range = self.range_group.checkedButton().text()
+        interval = self.interval_group.checkedButton().text()
+
+        chart_type_text = self.chart_group.checkedButton().text()
+        if chart_type_text == "Candlestick":
+            chart_type = ChartType.CANDLE
+        else:
+            chart_type = ChartType.LINE
+
+        color_name = self.color_combo.currentText().upper().replace(" ", "_")
+        try:
+            candle_color = CandleColor[color_name]
+        except KeyError:
+            candle_color = CandleColor.GREEN_RED
+
+        # Parse indicators from the picker
+        indicator_specs = self.indicator_picker.selected_values()
+        indicators = []
+        for spec in indicator_specs:
+            try:
+                indicators.append(parse_indicator(spec))
+            except ValueError:
+                pass
+
+        try:
+            fig = plot_ticker_chart(
+                ticker=self.current_symbol,
+                date_range=date_range,
+                time_interval=interval,
+                chart_type=chart_type,
+                candle_color=candle_color,
+                indicators=indicators if indicators else None,
+                dark_layout=self._dark_theme,
+            )
+        except Exception:
+            fig = None
+
+        if fig is not None:
+            html = fig.to_html(
+                include_plotlyjs="cdn",
+                config={"responsive": True},
+            )
+            html = html.replace(
+                "</head>",
+                "<style>body{background:transparent;margin:0;}</style></head>",
+            )
+            self.chart_view.setHtml(html)
+        else:
+            self.chart_view.setHtml(
+                f"<p style='color:#888;'>No data available for '{self.current_symbol}'</p>"
+            )
+
+        self._update_changes_bar()
+
+    def update_summary(self):
+        """Update the summary panel for the current ticker."""
+        if not self.current_symbol:
+            return
+
+        # Fetch ticker info
+        try:
+            info = get_ticker_info(self.current_symbol)
+        except Exception:
+            info = {}
+
+        name = (
+            info.get("longName")
+            or info.get("shortName")
+            or self.current_symbol
+        )
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        currency = info.get("currency", "")
+        prev_close = info.get("previousClose")
+
+        self.name_label.setText(name)
+        if price is not None:
+            self.price_label.setText(f"{price:,.2f} {currency}".strip())
+        else:
+            self.price_label.setText("-")
+
+        # Day change
+        if price is not None and prev_close:
+            day_change = (price - prev_close) / prev_close * 100
+            color = "#26a69a" if day_change >= 0 else "#ef5350"
+            self.change_label.setText(
+                f"Day Change: {_fmt_pct(day_change)}"
+            )
+            self.change_label.setStyleSheet(f"color: {color}; font-size: 14px;")
+        else:
+            self.change_label.setText("Day Change: N/A")
+            self.change_label.setStyleSheet("color: #888; font-size: 14px;")
+
+        # Clear old info rows
+        while self.info_layout.rowCount():
+            self.info_layout.removeRow(0)
+
+        # Key metrics
+        pairs = [
+            ("Open", _fmt_num(info.get("open"))),
+            ("Prev Close", _fmt_num(prev_close)),
+            ("Day Low", _fmt_num(info.get("dayLow"))),
+            ("Day High", _fmt_num(info.get("dayHigh"))),
+            ("52W Low", _fmt_num(info.get("fiftyTwoWeekLow"))),
+            ("52W High", _fmt_num(info.get("fiftyTwoWeekHigh"))),
+            ("Volume", _fmt_num(info.get("volume") or info.get("regularMarketVolume"))),
+            ("Avg Volume", _fmt_num(info.get("averageVolume"))),
             ("Market Cap", _fmt_num(info.get("marketCap"))),
             ("P/E (TTM)", _fmt_num(info.get("trailingPE"))),
-            ("Forward P/E", _fmt_num(info.get("forwardPE"))),
-            ("EPS", _fmt_num(info.get("trailingEps"))),
-            ("Beta", _fmt_num(info.get("beta"))),
-            ("Employees", _fmt_num(info.get("fullTimeEmployees"), digits=0)),
-            ("Dividend Yield", _fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
+            ("Fwd P/E", _fmt_num(info.get("forwardPE"))),
+            ("Div Yield", _fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
         ]
+        for key, val in pairs:
+            self.info_layout.addRow(QLabel(key + ":"), QLabel(val))
 
-    def metric_grid(title, pairs):
-        return html.Div(
-            [
-                html.Div(title, style={"fontSize": "10.5px", "color": colors["muted2"], "textTransform": "uppercase",
-                                        "letterSpacing": "0.05em", "marginTop": "10px", "marginBottom": "4px"}),
-                html.Div(
-                    [
-                        html.Div(
-                            [html.Span(k, style={"color": colors["muted"], "fontSize": "11.5px"}),
-                             html.Span(v, style={"fontSize": "12.5px", "float": "right", "color": colors["text"]})],
-                            style={"padding": "2px 0", "display": "flex", "justifyContent": "space-between"},
-                        )
-                        for k, v in pairs
-                    ]
-                ),
-            ]
-        )
-
-    return dbc.Card(
-        dbc.CardBody(
-            [
-                html.Div(ticker, style={"fontSize": "20px", "fontWeight": "700", "color": colors["text"]}),
-                html.Div(name, style={"fontSize": "12.5px", "color": colors["muted"], "marginBottom": "2px"}),
-                html.Div(f"{exchange} · {quote_type} · {market_state}", style={"fontSize": "10.5px", "color": colors["muted2"]}),
-                html.Div(
-                    [
-                        html.Span(_fmt_price(price, currency), style={"fontSize": "24px", "fontWeight": "700", "marginRight": "8px", "color": colors["text"]}),
-                        html.Span(currency, style={"fontSize": "12px", "color": colors["muted"]}),
-                    ],
-                    style={"marginTop": "8px"},
-                ),
-                html.Hr(style={"borderColor": colors["border"], "margin": "8px 0"}),
-                html.Div(change_badges, style={"display": "flex", "flexWrap": "wrap"}),
-                metric_grid("Basic", basic_section),
-                metric_grid("Information", info_section),
-            ]
-        ),
-        style={"backgroundColor": colors["card"], "border": f"1px solid {colors['border']}", "height": "100%"},
-    )
-
-
-def build_chart_figure(ticker, date_range, interval, timezone, chart_type, candle_color, indicator_values, theme):
-    indicators = []
-    warnings = []
-    for spec in (indicator_values or []):
+    def _fetch_changes_data(self):
+        """Fetch price change data for the changes bar."""
+        if not self.current_symbol:
+            self._changes_data = []
+            return
         try:
-            indicators.append(parse_indicator(spec))
-        except ValueError as e:
-            warnings.append(str(e))
-
-    try:
-        fig = plot_ticker_chart(
-            ticker=ticker,
-            date_range=date_range,
-            time_interval=interval,
-            timezone=timezone,
-            chart_type=ChartType(chart_type),
-            candle_color=CandleColor[candle_color.upper()],
-            indicators=indicators,
-            dark_layout=(theme == "dark"),
-        )
-    except Exception:
-        traceback.print_exc()
-        fig = None
-
-    if fig is None:
-        fig = go.Figure()
-        if theme == "dark":
-            to_dark_layout(fig, title=f"No data for '{ticker}'")
-        else:
-            fig.update_layout(title=f"No data for '{ticker}'")
-
-    return fig, warnings
-
-
-def build_news_content(ticker, theme):
-    colors = theme_colors(theme)
-    if not _NEWS_AVAILABLE:
-        return html.Div("News module unavailable.", style={"color": colors["muted"], "fontSize": "13px"})
-    try:
-        with TickerNewsClient() as client:
-            items = client.get_news_for_ticker(ticker, days=5)
-    except Exception as e:
-        return html.Div(f"Failed to load news: {e}", style={"color": colors["down"], "fontSize": "13px"})
-
-    if not items:
-        return html.Div("No recent news found.", style={"color": colors["muted"], "fontSize": "13px"})
-
-    rows = []
-    for item in items[:15]:
-        rows.append(
-            html.Div(
-                [
-                    html.A(item["title"], href=item["link"], target="_blank",
-                           style={"color": colors["text"], "fontSize": "13.5px", "textDecoration": "none"}),
-                    html.Div(f"{item['published']:%Y-%m-%d %H:%M}  ·  {item.get('query', '')}",
-                             style={"fontSize": "11px", "color": colors["muted"], "marginTop": "1px"}),
-                ],
-                style={"padding": "6px 0", "borderBottom": f"1px solid {colors['border']}"},
+            df = get_ticker_data(
+                self.current_symbol,
+                date_range="1y",
+                time_interval="1d",
             )
-        )
-    return html.Div(rows)
+            changes = get_price_changes(df)
+            labels = ["1D", "1W", "1M", "6M", "1Y"]
+            self._changes_data = list(zip(labels, changes))
+        except Exception:
+            self._changes_data = []
+
+    def _update_changes_bar(self):
+        """Render the price changes bar using the current candle colors."""
+        # Clear old labels
+        while self.changes_layout.count():
+            item = self.changes_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+
+        # Get candle colors
+        color_name = self.color_combo.currentText().upper().replace(" ", "_")
+        try:
+            candle_color = CandleColor[color_name]
+        except KeyError:
+            candle_color = CandleColor.GREEN_RED
+        up_color, down_color = candle_color.value
+
+        for label, val in self._changes_data:
+            if val is None:
+                color = "#888"
+            elif val >= 0:
+                color = up_color
+            else:
+                color = down_color
+            lbl = QLabel(f"{label}: {_fmt_pct(val)}")
+            lbl.setStyleSheet(
+                f"color: {color}; font-weight: bold; font-size: 13px;"
+            )
+            self.changes_layout.addWidget(lbl)
+        self.changes_layout.addStretch()
+
+    def load_news(self):
+        """Load news for the current ticker into the news browser."""
+        if not self.current_symbol:
+            return
+
+        self.news_button.setEnabled(False)
+        self.news_button.setText("Loading...")
+
+        if not NEWS_AVAILABLE:
+            self.news_browser.setHtml(
+                "<p style='color:#888;'><i>News module not available.</i></p>"
+            )
+            self.news_button.setEnabled(True)
+            self.news_button.setText("Load News")
+            return
+
+        try:
+            with TickerNewsClient() as client:
+                items = client.get_news_for_ticker(
+                    self.current_symbol, days=5
+                )
+        except Exception:
+            self.news_browser.setHtml(
+                "<p style='color:#ef5350;'><i>Failed to load news.</i></p>"
+            )
+            self.news_button.setEnabled(True)
+            self.news_button.setText("Load News")
+            return
+
+        if not items:
+            self.news_browser.setHtml(
+                "<p style='color:#888;'><i>No recent news found.</i></p>"
+            )
+            self.news_button.setEnabled(True)
+            self.news_button.setText("Load News")
+            return
+
+        html_parts = []
+        for item in items[:15]:
+            html_parts.append(
+                f'<p style="margin-bottom: 8px;">'
+                f'<a href="{item["link"]}" style="color: #e0e0e0; text-decoration: none;">'
+                f'{item["title"]}</a><br>'
+                f'<small style="color: #888;">'
+                f'{item["published"]:%Y-%m-%d %H:%M}</small>'
+                f'</p>'
+            )
+        self.news_browser.setHtml("".join(html_parts))
+
+        self.news_button.setEnabled(True)
+        self.news_button.setText("Load News")
+
+    def change_theme(self, theme_name):
+        """Apply a qt_material theme and refresh chart colors."""
+        apply_stylesheet(QApplication.instance(), theme=theme_name)
+
+        # Detect dark vs light
+        was_dark = self._dark_theme
+        self._dark_theme = "dark" in theme_name.lower()
+
+        # Refresh chart and thumbnails if theme mode changed
+        if was_dark != self._dark_theme:
+            self.update_chart()
+            for ticker, card in self.cards.items():
+                self._load_thumbnail_info(ticker, card)
 
 
 # ---------------------------------------------------------------------------
-# App layout
+# Entry point
 # ---------------------------------------------------------------------------
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY], suppress_callback_exceptions=True)
-app.title = "TikrView"
+def main():
+    app = QApplication(sys.argv)
+    apply_stylesheet(app, theme="dark_teal.xml")
+    window = StockApp()
+    window.show()
+    sys.exit(app.exec())
 
-_label_style = {"fontSize": "11px", "color": "#9e9e9e", "marginBottom": "2px", "display": "block"}
-
-top_bar = html.Div(
-    [
-        html.Div(
-            [
-                html.H5("TikrView", style={"fontWeight": "700", "margin": 0}),
-                html.Div(
-                    "stock dashboard",
-                    style={"fontSize": "11px", "color": "#9e9e9e"},
-                ),
-            ],
-            style={"marginBottom": "12px"},
-        ),
-
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.Label("Tickers (comma separated)", style=_label_style),
-                        dcc.Textarea(
-                            id="ticker-input",
-                            value=DEFAULT_TICKERS,
-                            style={
-                                "width": "100%",
-                                "minWidth": 0,
-                                "height": "38px",
-                                "backgroundColor": "#101010",
-                                "color": "#e0e0e0",
-                                "border": "1px solid #333",
-                                "resize": "none",
-                            },
-                        ),
-                    ],
-                    style={
-                        "flex": 1,
-                        "minWidth": 0,
-                        "marginRight": "10px",
-                    },
-                ),
-
-                dbc.Button(
-                    "Update",
-                    id="apply-btn",
-                    color="success",
-                    size="sm",
-                    n_clicks=0,
-                    style={
-                        "height": "38px",
-                        "marginTop": "16px",
-                        "marginRight": "10px",
-                    },
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Theme", style=_label_style),
-                        dcc.Dropdown(
-                            THEME_OPTIONS,
-                            "dark",
-                            id="theme-input",
-                            clearable=False,
-                            style={
-                                **DROPDOWN_STYLE,
-                                "width": "110px",
-                            },
-                        ),
-                    ],
-                ),
-            ],
-            style={
-                "display": "flex",
-                "alignItems": "flex-end",
-                "marginBottom": "14px",
-            },
-        ),
-
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.Label("Range", style=_label_style),
-                        dcc.Dropdown(
-                            RANGE_OPTIONS,
-                            "1y",
-                            id="range-input",
-                            clearable=False,
-                            style={**DROPDOWN_STYLE, "width": "90px"},
-                        ),
-                    ],
-                    style={"marginRight": "10px"},
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Interval", style=_label_style),
-                        dcc.Dropdown(
-                            INTERVAL_OPTIONS,
-                            "1d",
-                            id="interval-input",
-                            clearable=False,
-                            style={**DROPDOWN_STYLE, "width": "90px"},
-                        ),
-                    ],
-                    style={"marginRight": "10px"},
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Chart", style=_label_style),
-                        dcc.Dropdown(
-                            ["candle", "line"],
-                            "candle",
-                            id="chart-type-input",
-                            clearable=False,
-                            style={**DROPDOWN_STYLE, "width": "100px"},
-                        ),
-                    ],
-                    style={"marginRight": "10px"},
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Candle", style=_label_style),
-                        dcc.Dropdown(
-                            [c.name.lower() for c in CandleColor],
-                            CandleColor.GREEN_RED.name.lower(),
-                            id="candle-color-input",
-                            clearable=False,
-                            style={**DROPDOWN_STYLE, "width": "130px"},
-                        ),
-                    ],
-                    style={"marginRight": "10px"},
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Timezone", style=_label_style),
-                        dcc.Dropdown(
-                            TIMEZONE_OPTIONS,
-                            "Asia/Seoul",
-                            id="timezone-input",
-                            clearable=False,
-                            style={**DROPDOWN_STYLE, "width": "160px"},
-                        ),
-                    ],
-                    style={"marginRight": "10px"},
-                ),
-
-                html.Div(
-                    [
-                        html.Label("Indicators", style=_label_style),
-                        dcc.Dropdown(
-                            INDICATOR_OPTIONS,
-                            DEFAULT_INDICATORS,
-                            id="indicator-input",
-                            multi=True,
-                            style={**DROPDOWN_STYLE, "width": "240px"},
-                        ),
-                    ],
-                ),
-            ],
-            style={
-                "display": "flex",
-                "flexWrap": "wrap",
-                "alignItems": "flex-end",
-            },
-        ),
-    ],
-    id="top-bar",
-    style={
-        "padding": "14px 20px",
-        "borderBottom": "1px solid #2a2a2a",
-    },
-)
-
-thumbnail_panel = html.Div(
-    dcc.Loading(html.Div(id="thumbnail-list", children=[]), type="circle", color=THEMES["dark"]["accent"]),
-    id="thumbnail-panel",
-    style={"width": "170px", "flexShrink": 0, "padding": "12px", "overflowY": "auto"},
-)
-
-main_content = html.Div(
-    dcc.Loading(html.Div(id="main-panel"), type="circle", color=THEMES["dark"]["accent"]),
-    id="main-content",
-    style={"flexGrow": 1, "padding": "16px 24px", "overflowY": "auto"},
-)
-
-body_row = html.Div(
-    [thumbnail_panel, main_content],
-    id="body-row",
-    style={"display": "flex", "height": "calc(100vh - 92px)"},
-)
-
-app.layout = html.Div(
-    [
-        dcc.Store(id="tickers-store", data=parse_ticker_list(DEFAULT_TICKERS)),
-        dcc.Store(id="active-ticker-store", data=(parse_ticker_list(DEFAULT_TICKERS) or [None])[0]),
-        dcc.Store(id="theme-store", data="dark"),
-        top_bar,
-        body_row,
-    ],
-    id="app-root",
-    style={"backgroundColor": "#101010", "minHeight": "100vh", "color": "#e0e0e0"},
-)
-
-
-# ---------------------------------------------------------------------------
-# Callbacks
-# ---------------------------------------------------------------------------
-
-@app.callback(Output("theme-store", "data"), Input("theme-input", "value"))
-def set_theme(theme):
-    return theme or "dark"
-
-
-@app.callback(
-    Output("app-root", "style"),
-    Output("top-bar", "style"),
-    Output("thumbnail-panel", "style"),
-    Input("theme-store", "data"),
-)
-def apply_theme_chrome(theme):
-    colors = theme_colors(theme)
-
-    root_style = {
-        "backgroundColor": colors["bg"],
-        "minHeight": "100vh",
-        "color": colors["text"],
-    }
-
-    top_bar_style = {
-        "display": "block",
-        "padding": "14px 20px",
-        "borderBottom": f"1px solid {colors['border']}",
-        "backgroundColor": colors["panel"],
-    }
-
-    thumb_panel_style = {
-        "width": "170px",
-        "flexShrink": 0,
-        "padding": "12px",
-        "overflowY": "auto",
-        "backgroundColor": colors["bg"],
-        "borderRight": f"1px solid {colors['border']}",
-    }
-
-    return root_style, top_bar_style, thumb_panel_style
-
-
-@app.callback(
-    Output("tickers-store", "data"),
-    Input("apply-btn", "n_clicks"),
-    State("ticker-input", "value"),
-    prevent_initial_call=True,
-)
-def update_ticker_list(n_clicks, raw_tickers):
-    return parse_ticker_list(raw_tickers)
-
-
-@app.callback(
-    Output("thumbnail-list", "children"),
-    Input("tickers-store", "data"),
-    Input("theme-store", "data"),
-    State("active-ticker-store", "data"),
-)
-def render_thumbnails(tickers, theme, active_ticker):
-    # Rebuilt when the ticker list or theme changes (not on every click,
-    # which would recreate each thumbnail Div and reset its n_clicks).
-    tickers = tickers or []
-    return [build_thumbnail(t, active=(t == active_ticker), theme=theme) for t in tickers]
-
-
-@app.callback(
-    Output({"type": "thumb", "index": ALL}, "style"),
-    Input("active-ticker-store", "data"),
-    State({"type": "thumb", "index": ALL}, "id"),
-    State("theme-store", "data"),
-)
-def highlight_active_thumbnail(active_ticker, thumb_ids, theme):
-    # Cheap style-only update so the selected thumbnail is highlighted
-    # without recreating (and thereby resetting) the clickable components.
-    return [thumbnail_style(comp_id["index"] == active_ticker, theme) for comp_id in thumb_ids]
-
-
-@app.callback(
-    Output("active-ticker-store", "data"),
-    Input({"type": "thumb", "index": ALL}, "n_clicks"),
-    Input("tickers-store", "data"),
-    State("active-ticker-store", "data"),
-    prevent_initial_call=False,
-)
-def set_active_ticker(n_clicks_list, tickers, current_active):
-    tickers = tickers or []
-    triggered = ctx.triggered_id
-
-    if isinstance(triggered, dict) and triggered.get("type") == "thumb":
-        clicked_ticker = triggered["index"]
-        for comp_id, n in zip(ctx.inputs_list[0], n_clicks_list):
-            if comp_id["id"]["index"] == clicked_ticker and not n:
-                return no_update
-        return clicked_ticker
-
-    if current_active in tickers:
-        return current_active
-    return tickers[0] if tickers else None
-
-
-@app.callback(
-    Output("main-panel", "children"),
-    Input("active-ticker-store", "data"),
-    Input("range-input", "value"),
-    Input("interval-input", "value"),
-    Input("timezone-input", "value"),
-    Input("chart-type-input", "value"),
-    Input("candle-color-input", "value"),
-    Input("indicator-input", "value"),
-    Input("theme-store", "data"),
-)
-def render_main_panel(active_ticker, date_range, interval, timezone, chart_type, candle_color, indicator_values, theme):
-    colors = theme_colors(theme)
-
-    if not active_ticker:
-        return html.Div(
-            "Enter tickers at the top and click 'Update tickers'.",
-            style={"color": colors["muted"], "padding": "60px", "textAlign": "center"},
-        )
-
-    fig, warnings = build_chart_figure(active_ticker, date_range, interval, timezone, chart_type, candle_color, indicator_values, theme)
-
-    return html.Div(
-        [
-            dbc.Row(
-                [
-                    dbc.Col(build_summary_card(active_ticker, theme), width=12, lg=3, style={"marginBottom": "12px"}),
-                    dbc.Col(
-                        [
-                            dcc.Graph(figure=fig, style={"height": "72vh"}, config={"responsive": True}),
-                            html.Div(" / ".join(warnings), style={"color": "#f0ad4e", "fontSize": "12px", "marginTop": "4px"}) if warnings else None,
-                        ],
-                        width=12, lg=9,
-                    ),
-                ]
-            ),
-            html.Hr(style={"borderColor": colors["border"], "margin": "18px 0 10px"}),
-            html.Div(
-                [
-                    dbc.Button("📰 Load news", id={"type": "news-btn", "index": active_ticker}, size="sm",
-                               color="secondary", outline=True, n_clicks=0),
-                    dcc.Loading(html.Div(id={"type": "news-content", "index": active_ticker}, style={"marginTop": "10px"})),
-                ]
-            ),
-        ],
-        style={"padding": "4px"},
-    )
-
-
-@app.callback(
-    Output({"type": "news-content", "index": ALL}, "children"),
-    Input({"type": "news-btn", "index": ALL}, "n_clicks"),
-    State("theme-store", "data"),
-    prevent_initial_call=True,
-)
-def load_news(n_clicks_list, theme):
-    triggered = ctx.triggered_id
-    if not isinstance(triggered, dict):
-        return [no_update] * len(n_clicks_list)
-
-    ticker = triggered["index"]
-    output_ids = [o["id"]["index"] for o in ctx.outputs_list]
-    result = [no_update] * len(output_ids)
-    for i, idx in enumerate(output_ids):
-        if idx == ticker:
-            result[i] = build_news_content(ticker, theme)
-    return result
-
-
-def run_server():
-    serve(app.server, host="127.0.0.1", port=8050)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_server, daemon=True).start()
-
-    webview.create_window(
-        "TikrView",
-        "http://127.0.0.1:8050",
-        width=1600,
-        height=900,
-    )
-    webview.start()
+    main()
