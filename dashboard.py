@@ -109,6 +109,22 @@ class Config:
             indicators=data.get("indicators", DEFAULT_INDICATORS),
         )
 
+    def save(self, path="config.json"):
+        data = {
+            "theme": self.theme,
+            "timezone": self.timezone,
+            "window_width": self.window_width,
+            "window_height": self.window_height,
+            "tickers": self.tickers,
+            "range": self.date_range,
+            "interval": self.time_interval,
+            "chart_type": self.chart_type,
+            "candle_color": self.candle_color,
+            "indicators": self.indicators,
+        }
+        with open(path, "w") as config_file:
+            json.dump(data, config_file, indent=4)
+
 
 def fmt_num(value, digits=2):
     if value is None:
@@ -252,6 +268,7 @@ class TopBar(QWidget):
     tickers_applied = Signal(list)
     theme_changed = Signal(str)
     timezone_changed = Signal(str)
+    save_requested = Signal()
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -262,6 +279,9 @@ class TopBar(QWidget):
 
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(self.apply_clicked)
+
+        self.save_button = QPushButton("Save Config")
+        self.save_button.clicked.connect(self.save_requested)
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(list_themes())
@@ -282,6 +302,7 @@ class TopBar(QWidget):
         row.addWidget(QLabel("Tickers"))
         row.addWidget(self.ticker_edit)
         row.addWidget(self.apply_button)
+        row.addWidget(self.save_button)
 
         row.addSpacing(20)
 
@@ -648,6 +669,8 @@ class StockApp(QMainWindow):
         self.top_bar.theme_changed.connect(self.change_theme)
         self.top_bar.timezone_changed.connect(self.change_timezone)
 
+        self.top_bar.save_requested.connect(self.save_config)
+
         self.thumbnail_panel = ThumbnailPanel()
         self.thumbnail_panel.ticker_selected.connect(self.select_ticker)
 
@@ -840,6 +863,22 @@ class StockApp(QMainWindow):
     def change_timezone(self, tz_name):
         self.timezone = tz_name
         self.update_chart()
+
+    def save_config(self):
+        settings = self.chart_panel.settings()
+        config = Config(
+            theme=self.top_bar.theme_combo.currentText(),
+            timezone=self.timezone,
+            window_width=self.width(),
+            window_height=self.height(),
+            tickers=list(self.thumbnail_panel.cards.keys()),
+            date_range=settings.date_range,
+            time_interval=settings.interval,
+            chart_type=self.chart_panel.chart_group.checkedButton().text(),
+            candle_color=self.chart_panel.color_combo.currentText(),
+            indicators=self.chart_panel.indicator_picker.selected_values(),
+        )
+        config.save()
 
 
 def main():

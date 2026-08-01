@@ -191,12 +191,7 @@ class StochRSI(Indicator):
 
     @property
     def display_name(self):
-        return (
-            f"StochRSI "
-            f"({self.rsi_period}, "
-            f"{self.stoch_period}, "
-            f"{self.smooth_period})"
-        )
+        return f"StochRSI ({self.period}, {self.smooth_k}, {self.smooth_d})"
 
     def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         delta = df["Close"].diff()
