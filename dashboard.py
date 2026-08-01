@@ -2,7 +2,7 @@ import sys
 
 import json
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QDesktopServices
@@ -20,24 +20,6 @@ from core.market_client import get_ticker_data, get_ticker_info
 from core.plot_ticker import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
 from core.stock_indicator import get_price_changes, parse_indicator
 from core.news import TickerNewsClient
-
-# Default Options
-DEFAULT_TICKERS = [
-    "SPY",        # S&P 500
-    "QQQ",        # Nasdaq 100
-    "SCHD",       # Schwab US Dividend Equity ETF
-
-    "AAPL",       # Apple
-    "MSFT",       # Microsoft
-    "NVDA",       # Nvidia
-    "TSLA",       # Tesla
-    "GOOGL",      # Google
-
-    "005930.KS",  # SAMSUNG
-    "000660.KS",  # SK Hynix
-    "GLD",        # Gold
-]
-DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
 
 # Selectable UI options
 DATA_RANGE_OPTIONS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"]
@@ -76,6 +58,56 @@ INDICATOR_OPTIONS = [
     ("StochRSI (14,3,3)", "StochRSI:14,3,3"),
     ("Fisher (10)", "Fisher:10"),
 ]
+
+
+# Default Options
+DEFAULT_TICKERS = [
+    "SPY",        # S&P 500
+    "QQQ",        # Nasdaq 100
+    "SCHD",       # Schwab US Dividend Equity ETF
+
+    "AAPL",       # Apple
+    "MSFT",       # Microsoft
+    "NVDA",       # Nvidia
+    "TSLA",       # Tesla
+    "GOOGL",      # Google
+
+    "005930.KS",  # SAMSUNG
+    "000660.KS",  # SK Hynix
+    "GLD",        # Gold
+]
+DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
+
+@dataclass
+class Config:
+    theme: str = "dark_teal.xml"
+    timezone: str = "Asia/Seoul"
+    window_width: int = 1650
+    window_height: int = 920
+    tickers: list = field(default_factory=lambda: DEFAULT_TICKERS.copy())
+    date_range: str = "1y"
+    time_interval: str = "1d"
+    chart_type: str = "Candlestick"
+    candle_color: str = "Green_Red"
+    indicators: list = field(default_factory=lambda: DEFAULT_INDICATORS.copy())
+
+    @classmethod
+    def load(cls, path="config.json"):
+        with open(path) as config_file:
+            data = json.load(config_file)
+
+        return cls(
+            theme=data.get("theme", "dark_teal.xml"),
+            timezone=data.get("timezone", "Asia/Seoul"),
+            window_width=data.get("window_width", 1650),
+            window_height=data.get("window_height", 920),
+            tickers=data.get("tickers", DEFAULT_TICKERS),
+            date_range=data.get("range", "1y"),
+            time_interval=data.get("interval", "1d"),
+            chart_type=data.get("chart_type", "Candlestick"),
+            candle_color=data.get("candle_color", "Green_Red"),
+            indicators=data.get("indicators", DEFAULT_INDICATORS),
+        )
 
 
 def fmt_num(value, digits=2):
@@ -226,21 +258,20 @@ class TopBar(QWidget):
 
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
-        tickers = config.get("tickers", DEFAULT_TICKERS)
-        self.ticker_edit = QLineEdit(",".join(tickers))
+        self.ticker_edit = QLineEdit(",".join(config.tickers))
 
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(self.apply_clicked)
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(list_themes())
-        self.theme_combo.setCurrentText(config.get("theme", "dark_teal.xml"))
+        self.theme_combo.setCurrentText(config.theme)
         self.theme_combo.setMinimumWidth(140)
         self.theme_combo.currentTextChanged.connect(self.theme_changed)
 
         self.timezone_combo = QComboBox()
         self.timezone_combo.addItems(TIME_ZONE_OPTIONS)
-        self.timezone_combo.setCurrentText(config.get("timezone", "Asia/Seoul"))
+        self.timezone_combo.setCurrentText(config.timezone)
         self.timezone_combo.setMinimumWidth(140)
         self.timezone_combo.currentTextChanged.connect(self.timezone_changed)
 
@@ -415,7 +446,7 @@ class ChartPanel(QWidget):
             rb = QRadioButton(label)
             self.range_group.addButton(rb)
             range_row.addWidget(rb)
-        range_idx = DATA_RANGE_OPTIONS.index(config.get("range", "1y"))
+        range_idx = DATA_RANGE_OPTIONS.index(config.date_range)
         self.range_group.buttons()[range_idx].setChecked(True)
         self.range_group.buttonClicked.connect(self.settings_changed)
         range_row.addStretch()
@@ -428,7 +459,7 @@ class ChartPanel(QWidget):
             rb = QRadioButton(label)
             self.interval_group.addButton(rb)
             interval_row.addWidget(rb)
-        interval_idx = TIME_INTERVAL_OPTIONS.index(config.get("interval", "1d"))
+        interval_idx = TIME_INTERVAL_OPTIONS.index(config.time_interval)
         self.interval_group.buttons()[interval_idx].setChecked(True)
         self.interval_group.buttonClicked.connect(self.settings_changed)
         interval_row.addStretch()
@@ -441,13 +472,13 @@ class ChartPanel(QWidget):
             rb = QRadioButton(label)
             self.chart_group.addButton(rb)
             type_row.addWidget(rb)
-        type_idx = ["Candlestick", "Line"].index(config.get("chart_type", "Candlestick"))
+        type_idx = ["Candlestick", "Line"].index(config.chart_type)
         self.chart_group.buttons()[type_idx].setChecked(True)
         self.chart_group.buttonClicked.connect(self.settings_changed)
 
         self.color_combo = QComboBox()
         self.color_combo.addItems([color.name.title() for color in CandleColor])
-        self.color_combo.setCurrentText(config.get("candle_color", "Green_Red"))
+        self.color_combo.setCurrentText(config.candle_color)
         self.color_combo.setMinimumWidth(130)
         self.color_combo.currentIndexChanged.connect(self.settings_changed)
         type_row.addSpacing(16)
@@ -455,7 +486,7 @@ class ChartPanel(QWidget):
         type_row.addWidget(self.color_combo)
 
         self.indicator_picker = IndicatorPicker()
-        self.indicator_picker.set_selected(config.get("indicators", DEFAULT_INDICATORS))
+        self.indicator_picker.set_selected(config.indicators)
         self.indicator_picker.selection_changed.connect(self.settings_changed)
         type_row.addSpacing(16)
         type_row.addWidget(QLabel("Indicators:"))
@@ -594,22 +625,22 @@ class NewsPanel(QGroupBox):
 
 class StockApp(QMainWindow):
 
-    def __init__(self, config: dict):
+    def __init__(self, config: Config):
         super().__init__()
 
         self.config = config
 
         self.current_symbol = None
-        self.dark_theme = "dark" in config.get("theme", "dark_teal.xml").lower()
-        self.timezone = config.get("timezone", "Asia/Seoul")
+        self.dark_theme = "dark" in config.theme.lower()
+        self.timezone = config.timezone
         self.changes_data = []
 
         self.setWindowTitle("TikrView")
-        self.resize(config.get("window_width", 1650), config.get("window_height", 920))
+        self.resize(config.window_width, config.window_height)
 
         self.build_ui()
 
-        self.apply_tickers(config.get("tickers", DEFAULT_TICKERS))
+        self.apply_tickers(config.tickers)
 
     def build_ui(self):
         self.top_bar = TopBar(self.config)
@@ -812,11 +843,10 @@ class StockApp(QMainWindow):
 
 
 def main():
-    with open("config.json") as config_file:
-        config = json.load(config_file)
+    config = Config.load("config.json")
 
     app = QApplication(sys.argv)
-    apply_stylesheet(app, theme=config.get("theme", "dark_teal.xml"))
+    apply_stylesheet(app, theme=config.theme)
     window = StockApp(config)
     window.show()
     sys.exit(app.exec())
