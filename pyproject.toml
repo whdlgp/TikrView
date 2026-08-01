@@ -3,6 +3,7 @@ name = "tikrview"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "cachetools>=7.1.6",
     "feedparser>=6.0.12",
     "plotly>=6.9.0",
     "pyside6>=6.11.1",

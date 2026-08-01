@@ -1,6 +1,15 @@
 import yfinance as yf
 import pandas as pd
+from cachetools import TTLCache, cached
+from threading import Lock
 
+info_cache = TTLCache(maxsize=256, ttl=30)
+data_cache = TTLCache(maxsize=256, ttl=30)
+info_lock = Lock()
+data_lock = Lock()
+
+
+@cached(cache=info_cache, lock=info_lock)
 def get_ticker_info(ticker_name: str) -> dict:
     """
     Get ticker information from Yahoo Finance.
@@ -12,6 +21,7 @@ def get_ticker_info(ticker_name: str) -> dict:
         dict: ticker info with keys.
 
     Note:
+        - Use dict.copy() before modifying to avoid mutating the cache.
         - identifiers
             - symbol, shortName, longName, displayName, quoteType, exchange, fullExchangeName, currency
         - price (current session)
@@ -57,6 +67,7 @@ def get_ticker_info(ticker_name: str) -> dict:
     return info
 
 
+@cached(cache=data_cache, lock=data_lock)
 def get_ticker_data(ticker_name: str, date_range: str, time_interval: str, timezone: str = "Asia/Seoul") -> pd.DataFrame:
     """
     Get price data of ticker from Yahoo Finance.
@@ -72,6 +83,9 @@ def get_ticker_data(ticker_name: str, date_range: str, time_interval: str, timez
     Returns:
         pandas.DataFrame: OHLCV price data indexed by datetime, converted
             to the given timezone. Columns: Open, High, Low, Close, Volume
+    
+    Note:
+        - Use DataFrame.copy() before modifying to avoid mutating the cache.
     """
     # Download from Yahoo Finance.
     df = yf.download(ticker_name, period=date_range, interval=time_interval, progress=False)
