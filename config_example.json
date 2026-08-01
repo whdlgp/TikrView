@@ -29,6 +29,6 @@
         "SMA:20",
         "SMA:60",
         "VWAP",
-        "Fisher:10"
+        "Fisher:10,3"
     ]
 }

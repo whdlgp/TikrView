@@ -1,5 +1,5 @@
 import pandas as pd
-import numpy as np
+import pandas_ta as ta
 from abc import ABC, abstractmethod
 from enum import Enum
 
@@ -82,7 +82,7 @@ class SMA(Indicator):
         return f"SMA ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
-        return df["Close"].rolling(self.period).mean()
+        return ta.sma(df["Close"], length=self.period)
 
 
 class VWAP(Indicator):
@@ -90,11 +90,8 @@ class VWAP(Indicator):
     panel = Panel.MAIN
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
-        typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
-        cumulative_price_volume = (typical_price * df["Volume"]).cumsum()
-        cumulative_volume = df["Volume"].cumsum()
-
-        return cumulative_price_volume / cumulative_volume
+        # Very long anchor(100Y) for cumulative VWAP.
+        return ta.vwap(df["High"], df["Low"], df["Close"], df["Volume"], anchor="100Y")
 
 
 class KAMA(Indicator):
@@ -111,34 +108,47 @@ class KAMA(Indicator):
         return f"KAMA ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
-        close = df["Close"]
+        return ta.kama(df["Close"], length=self.period, fast=self.fast_period, slow=self.slow_period)
 
-        change = close.diff(self.period).abs()
-        volatility = close.diff().abs().rolling(self.period).sum()
-        efficiency = (change / volatility.replace(0, np.nan)).fillna(0)
 
-        fast = 2.0 / (self.fast_period + 1)
-        slow = 2.0 / (self.slow_period + 1)
-        factor = (efficiency * (fast - slow) + slow) ** 2
+class BollingerBands(Indicator):
+    """Bollinger Bands."""
+    panel = Panel.MAIN
 
-        kama = pd.Series(np.nan, index=df.index)
+    def __init__(self, period: int = 20, std: float = 2.0):
+        self.period = period
+        self.std = std
 
-        start_idx = self.period
-        if len(df) <= self.period:
-            start_idx = len(df) - 1
+    @property
+    def display_name(self):
+        return f"BB ({self.period}, {self.std})"
 
-        if start_idx < 0:
-            return kama
+    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+        bb = ta.bbands(df["Close"], length=self.period, std=self.std)
 
-        kama.iloc[start_idx] = close.iloc[start_idx]
+        lower = bb[f"BBL_{self.period}_{self.std}_{self.std}"]
+        mid = bb[f"BBM_{self.period}_{self.std}_{self.std}"]
+        upper = bb[f"BBU_{self.period}_{self.std}_{self.std}"]
 
-        for i in range(start_idx + 1, len(df)):
-            prev = kama.iloc[i - 1]
-            price = close.iloc[i]
-            weight = factor.iloc[i]
-            kama.iloc[i] = prev + weight * (price - prev)
+        return lower, mid, upper
 
-        return kama
+
+class SuperTrend(Indicator):
+    """SuperTrend."""
+    panel = Panel.MAIN
+
+    def __init__(self, period: int = 10, multiplier: float = 3.0):
+        self.period = period
+        self.multiplier = multiplier
+
+    @property
+    def display_name(self):
+        return f"SuperTrend ({self.period}, {self.multiplier})"
+
+    def calc(self, df: pd.DataFrame) -> pd.Series:
+        st = ta.supertrend(df["High"], df["Low"], df["Close"], length=self.period, multiplier=self.multiplier)
+
+        return st[f"SUPERT_{self.period}_{self.multiplier}"]
 
 
 class WilliamsR(Indicator):
@@ -154,10 +164,7 @@ class WilliamsR(Indicator):
         return f"Williams %R ({self.period})"
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
-        high = df["High"].rolling(self.period).max()
-        low = df["Low"].rolling(self.period).min()
-
-        return (high - df["Close"]) / (high - low) * -100
+        return ta.willr(df["High"], df["Low"], df["Close"], length=self.period)
 
 
 class MFI(Indicator):
@@ -169,14 +176,7 @@ class MFI(Indicator):
         self.period = period
 
     def calc(self, df: pd.DataFrame) -> pd.Series:
-        typical = (df["High"] + df["Low"] + df["Close"]) / 3
-        flow = typical * df["Volume"]
-        direction = typical.diff() > 0
-
-        pos_flow = flow.where(direction, 0).rolling(self.period).sum()
-        neg_flow = flow.where(~direction, 0).rolling(self.period).sum()
-
-        return 100 - (100 / (1 + (pos_flow / neg_flow)))
+        return ta.mfi(df["High"], df["Low"], df["Close"], df["Volume"], length=self.period)
 
 
 class StochRSI(Indicator):
@@ -184,7 +184,7 @@ class StochRSI(Indicator):
     panel = Panel.SUB
     reference_lines = [20, 80]
 
-    def __init__(self, period: int = 14, smooth_k: int = 3, smooth_d: int = 3):
+    def __init__(self, period: int = 14, smooth_k: int = 2, smooth_d: int = 3):
         self.period = period
         self.smooth_k = smooth_k
         self.smooth_d = smooth_d
@@ -194,22 +194,11 @@ class StochRSI(Indicator):
         return f"StochRSI ({self.period}, {self.smooth_k}, {self.smooth_d})"
 
     def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-        delta = df["Close"].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
+        srsi = ta.stochrsi(df["Close"], length=self.period, rsi_length=self.period,
+                            k=self.smooth_k, d=self.smooth_d, mamode="sma")
 
-        avg_gain = gain.rolling(self.period).mean()
-        avg_loss = loss.rolling(self.period).mean()
-
-        strength = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + strength))
-
-        min_rsi = rsi.rolling(self.period).min()
-        max_rsi = rsi.rolling(self.period).max()
-
-        stoch_rsi = (rsi - min_rsi) / (max_rsi - min_rsi)
-        k = stoch_rsi.rolling(self.smooth_k).mean() * 100
-        d = k.rolling(self.smooth_d).mean()
+        k = srsi[f"STOCHRSIk_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"]
+        d = srsi[f"STOCHRSId_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"]
 
         return k, d
 
@@ -219,27 +208,75 @@ class FisherTransform(Indicator):
     panel = Panel.SUB
     reference_lines = [-2, -1, 0, 1, 2]
 
-    def __init__(self, period: int = 10):
+    def __init__(self, period: int = 10, signal: int = 3):
+        self.period = period
+        self.signal = signal
+
+    @property
+    def display_name(self):
+        return f"Fisher ({self.period}, {self.signal})"
+
+    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+        fisher = ta.fisher(df["High"], df["Low"], length=self.period, signal=self.signal)
+
+        return fisher[f"FISHERT_{self.period}_{self.signal}"], fisher[f"FISHERTs_{self.period}_{self.signal}"]
+
+
+class MACD(Indicator):
+    """Moving Average Convergence Divergence."""
+    panel = Panel.SUB
+    reference_lines = [0]
+
+    def __init__(self, fast: int = 12, slow: int = 26, signal: int = 9):
+        self.fast = fast
+        self.slow = slow
+        self.signal = signal
+
+    @property
+    def display_name(self):
+        return f"MACD ({self.fast}, {self.slow}, {self.signal})"
+
+    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+        macd = ta.macd(df["Close"], fast=self.fast, slow=self.slow, signal=self.signal)
+
+        line = macd[f"MACD_{self.fast}_{self.slow}_{self.signal}"]
+        hist = macd[f"MACDh_{self.fast}_{self.slow}_{self.signal}"]
+        signal = macd[f"MACDs_{self.fast}_{self.slow}_{self.signal}"]
+
+        return line, hist, signal
+
+
+class ADX(Indicator):
+    """Average Directional Index."""
+    panel = Panel.SUB
+    reference_lines = [20, 25]
+
+    def __init__(self, period: int = 14):
         self.period = period
 
     @property
     def display_name(self):
-        return f"Fisher ({self.period})"
+        return f"ADX ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-        import numpy as np
+    def calc(self, df: pd.DataFrame) -> pd.Series:
+        adx = ta.adx(df["High"], df["Low"], df["Close"], length=self.period)
 
-        price = (df["High"] + df["Low"]) / 2
-        high = price.rolling(self.period).max()
-        low = price.rolling(self.period).min()
+        return adx[f"ADX_{self.period}"]
 
-        value = 2 * (price - low) / (high - low) - 1
-        value = value.clip(-0.999, 0.999)
 
-        fisher = 0.5 * np.log((1 + value) / (1 - value))
-        signal = fisher.ewm(span=5, adjust=False).mean()
+class ATR(Indicator):
+    """Average True Range."""
+    panel = Panel.SUB
 
-        return fisher, signal
+    def __init__(self, period: int = 14):
+        self.period = period
+
+    @property
+    def display_name(self):
+        return f"ATR ({self.period})"
+
+    def calc(self, df: pd.DataFrame) -> pd.Series:
+        return ta.atr(df["High"], df["Low"], df["Close"], length=self.period)
 
 
 def get_indicators():
@@ -248,10 +285,15 @@ def get_indicators():
         "SMA": SMA,
         "VWAP": VWAP,
         "KAMA": KAMA,
+        "BBANDS": BollingerBands,
+        "SUPERTREND": SuperTrend,
         "WILLIAMSR": WilliamsR,
         "MFI": MFI,
         "STOCHRSI": StochRSI,
         "FISHER": FisherTransform,
+        "MACD": MACD,
+        "ADX": ADX,
+        "ATR": ATR,
     } 
     return indicators
 
@@ -327,9 +369,14 @@ if __name__ == "__main__":
     result["SMA20"] = SMA(20).calc(df)
     result["VWAP"] = VWAP().calc(df)
     result["KAMA"] = KAMA().calc(df)
+    result["BBLower"], result["BBMid"], result["BBUpper"] = BollingerBands().calc(df)
+    result["SuperTrend"] = SuperTrend().calc(df)
     result["WilliamsR"] = WilliamsR().calc(df)
     result["MFI"] = MFI().calc(df)
     result["StochRSI_K"], result["StochRSI_D"] = StochRSI().calc(df)
     result["Fisher"], result["FisherSignal"] = FisherTransform().calc(df)
+    result["MACD"], result["MACDHist"], result["MACDSignal"] = MACD().calc(df)
+    result["ADX"] = ADX().calc(df)
+    result["ATR"] = ATR().calc(df)
 
     print(result.tail(20))

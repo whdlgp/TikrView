@@ -53,10 +53,15 @@ INDICATOR_OPTIONS = [
     ("SMA 200", "SMA:200"),
     ("VWAP", "VWAP"),
     ("KAMA 10", "KAMA:10"),
+    ("Bollinger Bands (20,2.0)", "BBANDS:20,2.0"),
+    ("SuperTrend (10,3.0)", "SuperTrend:10,3.0"),
     ("Williams %R (14)", "WilliamsR:14"),
     ("MFI (14)", "MFI:14"),
-    ("StochRSI (14,3,3)", "StochRSI:14,3,3"),
-    ("Fisher (10)", "Fisher:10"),
+    ("ATR (14)", "ATR:14"),
+    ("StochRSI (14,2,3)", "StochRSI:14,2,3"),
+    ("Fisher (10,3)", "Fisher:10,3"),
+    ("MACD (12,26,9)", "MACD:12,26,9"),
+    ("ADX (14)", "ADX:14"),
 ]
 
 

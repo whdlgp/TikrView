@@ -6,8 +6,8 @@ Usage:
     python cli.py thumbnail AAPL MSFT NVDA AMZN GOOGL META --range 6mo --interval 1d --cols 2
     python cli.py thumbnail AAPL MSFT --timezone America/New_York
     python cli.py chart AAPL --range 1y --interval 1d --indicators SMA:20 SMA:60 VWAP KAMA:10
-    python cli.py chart AAPL --type line --indicators MFI:14 WilliamsR:14 Fisher:10 StochRSI:14,3,3
-    python cli.py chart BTC-USD --range 3mo --interval 4h --indicators SMA:20 VWAP MFI:14 Fisher:10
+    python cli.py chart AAPL --type line --indicators MFI:14 WilliamsR:14 Fisher:10,3 StochRSI:14,2,3
+    python cli.py chart BTC-USD --range 3mo --interval 4h --indicators SMA:20 VWAP MFI:14 Fisher:10,3
     python cli.py chart AAPL --candle-color red_blue
     python cli.py chart AAPL --timezone America/New_York --indicators SMA:20
 """
@@ -40,7 +40,6 @@ def cmd_thumbnail(args):
         row, col = divmod(i, cols)
 
         thumb = plot_ticker_thumbnail(ticker=ticker, date_range=args.range, time_interval=args.interval, timezone=args.timezone, dark_layout=False)
-        thumb = plot_ticker_thumbnail(ticker=ticker, date_range=args.range, time_interval=args.interval, dark_layout=False)
 
         if thumb is None:
             continue
