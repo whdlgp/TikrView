@@ -17,8 +17,8 @@ import math
 
 from plotly.subplots import make_subplots
 
-from core.stock_indicator import parse_indicator
-from core.plot_ticker import ChartType, CandleColor, plot_ticker_thumbnail, plot_ticker_chart, to_dark_layout
+from core.indicator import parse_indicator
+from core.plot import ChartType, CandleColor, plot_ticker_thumbnail, plot_ticker_chart, to_dark_layout
 
 
 def cmd_thumbnail(args):

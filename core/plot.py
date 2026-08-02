@@ -2,8 +2,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from enum import Enum
 
-from .market_client import get_ticker_data, get_ticker_info
-from .stock_indicator import Panel, Indicator
+from .market import get_ticker_data, get_ticker_info
+from .indicator import Panel, Indicator
 
 
 def to_dark_layout(fig, title=None):

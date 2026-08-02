@@ -18,9 +18,9 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from qt_material import apply_stylesheet, list_themes
 
-from core.market_client import get_ticker_data, get_ticker_info
-from core.plot_ticker import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
-from core.stock_indicator import get_price_changes, parse_indicator
+from core.market import get_ticker_data, get_ticker_info
+from core.plot import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
+from core.indicator import get_price_changes, parse_indicator
 from core.news import TickerNewsClient
 
 

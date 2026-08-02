@@ -346,7 +346,7 @@ def parse_indicator(indicator_str: str):
 
 
 if __name__ == "__main__":
-    from market_client import get_ticker_data
+    from market import get_ticker_data
 
     # Test price change
     tickers = ["AGNC", "AAPL", "TSLA", "O", "SPY", "INVALIDTICKER123"]
