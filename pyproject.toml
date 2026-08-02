@@ -10,6 +10,5 @@ dependencies = [
     "pyside6>=6.11.1",
     "pywebview>=6.2.1",
     "qt-material>=2.17",
-    "waitress>=3.0.2",
     "yfinance>=1.5.2",
 ]
