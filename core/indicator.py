@@ -56,7 +56,7 @@ class Indicator(ABC):
         return type(self).__name__
 
     @abstractmethod
-    def calc(self, df: pd.DataFrame) -> pd.Series | tuple[pd.Series, ...]:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         """
         Compute the indicator values.
 
@@ -64,8 +64,9 @@ class Indicator(ABC):
             df (pd.DataFrame): OHLCV price data
 
         Returns:
-            pd.Series | tuple[pd.Series, ...]:
-                One or more indicator series, same index as df.
+            dict[str, pd.Series]:
+                Mapping from output name (e.g. "SMA", "BB\u2193", "MACD-H")
+                to a Series, same index as df.
         """
         ...
 
@@ -81,17 +82,19 @@ class SMA(Indicator):
     def display_name(self):
         return f"SMA ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        return ta.sma(df["Close"], length=self.period)
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"SMA": ta.sma(df["Close"], length=self.period)}
 
 
-class VWAP(Indicator):
-    """Volume Weighted Average Price."""
+class AnchoredVWAP(Indicator):
+    """Anchored VWAP cumulative from the start of the fetched data window."""
     panel = Panel.MAIN
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        # Very long anchor(100Y) for cumulative VWAP.
-        return ta.vwap(df["High"], df["Low"], df["Close"], df["Volume"], anchor="100Y")
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        # Cumulative from the start of df (ta.vwap's Y-based anchor is broken).
+        typical_price = ta.hlc3(df["High"], df["Low"], df["Close"])
+        weighted_price = typical_price * df["Volume"]
+        return {"AVWAP": weighted_price.cumsum() / df["Volume"].cumsum()}
 
 
 class KAMA(Indicator):
@@ -107,8 +110,8 @@ class KAMA(Indicator):
     def display_name(self):
         return f"KAMA ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        return ta.kama(df["Close"], length=self.period, fast=self.fast_period, slow=self.slow_period)
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"KAMA": ta.kama(df["Close"], length=self.period, fast=self.fast_period, slow=self.slow_period)}
 
 
 class BollingerBands(Indicator):
@@ -123,14 +126,14 @@ class BollingerBands(Indicator):
     def display_name(self):
         return f"BB ({self.period}, {self.std})"
 
-    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         bb = ta.bbands(df["Close"], length=self.period, std=self.std)
 
-        lower = bb[f"BBL_{self.period}_{self.std}_{self.std}"]
-        mid = bb[f"BBM_{self.period}_{self.std}_{self.std}"]
-        upper = bb[f"BBU_{self.period}_{self.std}_{self.std}"]
-
-        return lower, mid, upper
+        return {
+            "BB\u2193": bb[f"BBL_{self.period}_{self.std}_{self.std}"],
+            "BB": bb[f"BBM_{self.period}_{self.std}_{self.std}"],
+            "BB\u2191": bb[f"BBU_{self.period}_{self.std}_{self.std}"],
+        }
 
 
 class SuperTrend(Indicator):
@@ -145,10 +148,10 @@ class SuperTrend(Indicator):
     def display_name(self):
         return f"SuperTrend ({self.period}, {self.multiplier})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         st = ta.supertrend(df["High"], df["Low"], df["Close"], length=self.period, multiplier=self.multiplier)
 
-        return st[f"SUPERT_{self.period}_{self.multiplier}"]
+        return {"S-Trend": st[f"SUPERT_{self.period}_{self.multiplier}"]}
 
 
 class WilliamsR(Indicator):
@@ -163,8 +166,8 @@ class WilliamsR(Indicator):
     def display_name(self):
         return f"Williams %R ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        return ta.willr(df["High"], df["Low"], df["Close"], length=self.period)
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"%R": ta.willr(df["High"], df["Low"], df["Close"], length=self.period)}
 
 
 class MFI(Indicator):
@@ -175,8 +178,12 @@ class MFI(Indicator):
     def __init__(self, period: int = 14):
         self.period = period
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        return ta.mfi(df["High"], df["Low"], df["Close"], df["Volume"], length=self.period)
+    @property
+    def display_name(self):
+        return f"MFI ({self.period})"
+
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"MFI": ta.mfi(df["High"], df["Low"], df["Close"], df["Volume"], length=self.period)}
 
 
 class StochRSI(Indicator):
@@ -193,14 +200,14 @@ class StochRSI(Indicator):
     def display_name(self):
         return f"StochRSI ({self.period}, {self.smooth_k}, {self.smooth_d})"
 
-    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         srsi = ta.stochrsi(df["Close"], length=self.period, rsi_length=self.period,
                             k=self.smooth_k, d=self.smooth_d, mamode="sma")
 
-        k = srsi[f"STOCHRSIk_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"]
-        d = srsi[f"STOCHRSId_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"]
-
-        return k, d
+        return {
+            "%K": srsi[f"STOCHRSIk_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"],
+            "%D": srsi[f"STOCHRSId_{self.period}_{self.period}_{self.smooth_k}_{self.smooth_d}"],
+        }
 
 
 class FisherTransform(Indicator):
@@ -216,10 +223,13 @@ class FisherTransform(Indicator):
     def display_name(self):
         return f"Fisher ({self.period}, {self.signal})"
 
-    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         fisher = ta.fisher(df["High"], df["Low"], length=self.period, signal=self.signal)
 
-        return fisher[f"FISHERT_{self.period}_{self.signal}"], fisher[f"FISHERTs_{self.period}_{self.signal}"]
+        return {
+            "Fisher": fisher[f"FISHERT_{self.period}_{self.signal}"],
+            "Fisher\u00b7Sig": fisher[f"FISHERTs_{self.period}_{self.signal}"],
+        }
 
 
 class MACD(Indicator):
@@ -236,14 +246,14 @@ class MACD(Indicator):
     def display_name(self):
         return f"MACD ({self.fast}, {self.slow}, {self.signal})"
 
-    def calc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         macd = ta.macd(df["Close"], fast=self.fast, slow=self.slow, signal=self.signal)
 
-        line = macd[f"MACD_{self.fast}_{self.slow}_{self.signal}"]
-        hist = macd[f"MACDh_{self.fast}_{self.slow}_{self.signal}"]
-        signal = macd[f"MACDs_{self.fast}_{self.slow}_{self.signal}"]
-
-        return line, hist, signal
+        return {
+            "MACD": macd[f"MACD_{self.fast}_{self.slow}_{self.signal}"],
+            "MACD\u00b7Hist": macd[f"MACDh_{self.fast}_{self.slow}_{self.signal}"],
+            "MACD\u00b7Sig": macd[f"MACDs_{self.fast}_{self.slow}_{self.signal}"],
+        }
 
 
 class ADX(Indicator):
@@ -258,10 +268,10 @@ class ADX(Indicator):
     def display_name(self):
         return f"ADX ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         adx = ta.adx(df["High"], df["Low"], df["Close"], length=self.period)
 
-        return adx[f"ADX_{self.period}"]
+        return {"ADX": adx[f"ADX_{self.period}"]}
 
 
 class ATR(Indicator):
@@ -275,15 +285,15 @@ class ATR(Indicator):
     def display_name(self):
         return f"ATR ({self.period})"
 
-    def calc(self, df: pd.DataFrame) -> pd.Series:
-        return ta.atr(df["High"], df["Low"], df["Close"], length=self.period)
+    def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"ATR": ta.atr(df["High"], df["Low"], df["Close"], length=self.period)}
 
 
 def get_indicators():
     """Get available indicators"""
     indicators = {
         "SMA": SMA,
-        "VWAP": VWAP,
+        "AVWAP": AnchoredVWAP,
         "KAMA": KAMA,
         "BBANDS": BollingerBands,
         "SUPERTREND": SuperTrend,
@@ -304,7 +314,7 @@ def parse_indicator(indicator_str: str):
 
     Examples:
         "SMA:20" -> SMA(20)
-        "VWAP" -> VWAP()
+        "AVWAP" -> AnchoredVWAP()
         "StochRSI:14,3,3" -> StochRSI(14, 3, 3)
 
     Args:
@@ -366,17 +376,21 @@ if __name__ == "__main__":
     result = pd.DataFrame(index=df.index)
 
     result["Close"] = df["Close"]
-    result["SMA20"] = SMA(20).calc(df)
-    result["VWAP"] = VWAP().calc(df)
-    result["KAMA"] = KAMA().calc(df)
-    result["BBLower"], result["BBMid"], result["BBUpper"] = BollingerBands().calc(df)
-    result["SuperTrend"] = SuperTrend().calc(df)
-    result["WilliamsR"] = WilliamsR().calc(df)
-    result["MFI"] = MFI().calc(df)
-    result["StochRSI_K"], result["StochRSI_D"] = StochRSI().calc(df)
-    result["Fisher"], result["FisherSignal"] = FisherTransform().calc(df)
-    result["MACD"], result["MACDHist"], result["MACDSignal"] = MACD().calc(df)
-    result["ADX"] = ADX().calc(df)
-    result["ATR"] = ATR().calc(df)
+    result["SMA20"] = SMA(20).calc(df)["SMA"]
+    result["AVWAP"] = AnchoredVWAP().calc(df)["AVWAP"]
+    result["KAMA"] = KAMA().calc(df)["KAMA"]
+    bb = BollingerBands().calc(df)
+    result["BBLower"], result["BBMid"], result["BBUpper"] = bb["BB\u2193"], bb["BB"], bb["BB\u2191"]
+    result["SuperTrend"] = SuperTrend().calc(df)["S-Trend"]
+    result["WilliamsR"] = WilliamsR().calc(df)["%R"]
+    result["MFI"] = MFI().calc(df)["MFI"]
+    srsi = StochRSI().calc(df)
+    result["StochRSI_K"], result["StochRSI_D"] = srsi["%K"], srsi["%D"]
+    fisher = FisherTransform().calc(df)
+    result["Fisher"], result["FisherSignal"] = fisher["Fisher"], fisher["Fisher\u00b7Sig"]
+    macd = MACD().calc(df)
+    result["MACD"], result["MACDHist"], result["MACDSignal"] = macd["MACD"], macd["MACD\u00b7Hist"], macd["MACD\u00b7Sig"]
+    result["ADX"] = ADX().calc(df)["ADX"]
+    result["ATR"] = ATR().calc(df)["ATR"]
 
     print(result.tail(20))

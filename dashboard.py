@@ -112,7 +112,7 @@ INDICATOR_OPTIONS = [
     ("SMA 60", "SMA:60"),
     ("SMA 120", "SMA:120"),
     ("SMA 200", "SMA:200"),
-    ("VWAP", "VWAP"),
+    ("AVWAP", "AVWAP"),
     ("KAMA 10", "KAMA:10"),
     ("Bollinger Bands (20,2.0)", "BBANDS:20,2.0"),
     ("SuperTrend (10,3.0)", "SuperTrend:10,3.0"),

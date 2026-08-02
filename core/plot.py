@@ -174,15 +174,14 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
 
     for ind in main_indicators:
         values = ind.calc(df)
-        series_list = values if isinstance(values, tuple) else (values,)
 
-        for series in series_list:
+        for name, series in values.items():
             fig.add_trace(
                 go.Scatter(
                     x=df.index,
                     y=series,
                     mode="lines",
-                    name=ind.display_name,
+                    name=name,
                     line=dict(width=1.3),
                 ),
                 row=1, col=1,
@@ -192,15 +191,14 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
         panel_row = 2 + i
 
         values = ind.calc(df)
-        series_list = values if isinstance(values, tuple) else (values,)
 
-        for j, series in enumerate(series_list):
+        for name, series in values.items():
             fig.add_trace(
                 go.Scatter(
                     x=df.index,
                     y=series,
                     mode="lines",
-                    name=f"{type(ind).__name__}_{j}",
+                    name=name,
                     line=dict(width=1.3),
                 ),
                 row=panel_row, col=1,

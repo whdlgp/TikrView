@@ -28,7 +28,7 @@
     "indicators": [
         "SMA:20",
         "SMA:60",
-        "VWAP",
+        "AVWAP",
         "Fisher:10,3"
     ]
 }

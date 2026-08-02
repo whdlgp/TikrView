@@ -5,9 +5,9 @@ Stock CLI
 Usage:
     python cli.py thumbnail AAPL MSFT NVDA AMZN GOOGL META --range 6mo --interval 1d --cols 2
     python cli.py thumbnail AAPL MSFT --timezone America/New_York
-    python cli.py chart AAPL --range 1y --interval 1d --indicators SMA:20 SMA:60 VWAP KAMA:10
+    python cli.py chart AAPL --range 1y --interval 1d --indicators SMA:20 SMA:60 AVWAP KAMA:10
     python cli.py chart AAPL --type line --indicators MFI:14 WilliamsR:14 Fisher:10,3 StochRSI:14,2,3
-    python cli.py chart BTC-USD --range 3mo --interval 4h --indicators SMA:20 VWAP MFI:14 Fisher:10,3
+    python cli.py chart BTC-USD --range 3mo --interval 4h --indicators SMA:20 AVWAP MFI:14 Fisher:10,3
     python cli.py chart AAPL --candle-color red_blue
     python cli.py chart AAPL --timezone America/New_York --indicators SMA:20
 """
@@ -99,7 +99,7 @@ def build_parser():
     p_chart.add_argument("ticker", help="Ticker symbol (e.g. AAPL)")
     p_chart.add_argument("--range", default="1y", help="Date range (default: 1y)")
     p_chart.add_argument("--interval", default="1d", help="Time interval (default: 1d)")
-    p_chart.add_argument("--indicators", nargs="*", default=[], help="Indicators (e.g. SMA:20 VWAP)")
+    p_chart.add_argument("--indicators", nargs="*", default=[], help="Indicators (e.g. SMA:20 AVWAP)")
     p_chart.add_argument("--type", choices=["candle", "line"], default="candle", help="Chart type (default: candle)")
     p_chart.add_argument("--candle-color", choices=[c.name.lower() for c in CandleColor], default=CandleColor.GREEN_RED.name.lower(), help=f"Candlestick color scheme (default: {CandleColor.GREEN_RED.name.lower()})")
     p_chart.add_argument("--timezone", default="Asia/Seoul", help="Timezone (default: Asia/Seoul)")
