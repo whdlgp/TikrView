@@ -1,5 +1,27 @@
-import sys
+"""
+TikrView - a simple stock dashboard GUI.
 
++--------------------------------------------------------------------+
+| Tickers [___________] [Apply] [Save]   Theme [v]   Timezone [v]    |
++----------------+---------------------------------------------------+
+| [Thumbnail]     | CHART | NEWS                                     |
+| [Thumbnail]     |--------------------------------------------------|
+| [Thumbnail]     | Range / Interval / Chart type / Indicators       |
+| [Thumbnail]     |--------------------------------------------------|
+| [Thumbnail]     | +-----------+  +----------------------------+    |
+| ...             | | Summary   |  |                            |    |
+| (scrollable)    | | - price   |  |          Chart             |    |
+|                 | | - stats   |  |                            |    |
+|                 | +-----------+  +----------------------------+    |
++----------------+---------------------------------------------------+
+
+Usage:
+    python dashboard.py
+"""
+
+import sys
+from pathlib import Path
+import shutil
 import json
 
 import traceback
@@ -24,7 +46,13 @@ from core.indicator import get_price_changes, parse_indicator
 from core.news import TickerNewsClient
 
 
+# === Background threading ===
+
 class WorkerSignals(QObject):
+    """
+    Signals for Worker's results.
+    QRunnable can't send signals on its own.
+    """
 
     result = Signal(object)
     error = Signal(str)
@@ -32,6 +60,7 @@ class WorkerSignals(QObject):
 
 
 class Worker(QRunnable):
+    """Runs a function on a background thread, to keep the GUI responsive."""
 
     def __init__(self, fn, *args, **kwargs):
         super().__init__()
@@ -52,7 +81,8 @@ class Worker(QRunnable):
             self.signals.finished.emit()
 
 
-# Selectable UI options
+# === UI option constants ===
+
 DATA_RANGE_OPTIONS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"]
 TIME_INTERVAL_OPTIONS = ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]
 TIME_ZONE_OPTIONS = [
@@ -96,7 +126,8 @@ INDICATOR_OPTIONS = [
 ]
 
 
-# Default Options
+# === Default values ===
+
 DEFAULT_TICKERS = [
     "SPY",        # S&P 500
     "QQQ",        # Nasdaq 100
@@ -114,8 +145,13 @@ DEFAULT_TICKERS = [
 ]
 DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
 
+
+# === Config ===
+
 @dataclass
 class Config:
+    """App settings, loaded from and saved to a JSON file."""
+
     theme: str = "dark_teal.xml"
     timezone: str = "Asia/Seoul"
     window_width: int = 1650
@@ -162,7 +198,14 @@ class Config:
             json.dump(data, config_file, indent=4)
 
 
+# === Formatting helpers ===
+
 def fmt_num(value, digits=2):
+    """
+    Formats a number with K/M/B/T suffixes.
+    e.g. 1500000 -> "1.50M"
+    """
+
     if value is None:
         return "N/A"
     try:
@@ -178,6 +221,11 @@ def fmt_num(value, digits=2):
 
 
 def fmt_pct(value):
+    """
+    Formats a number as a percent string.
+    e.g. 1.234 -> "+1.23%"
+    """
+
     if value is None:
         return "N/A"
     try:
@@ -186,7 +234,10 @@ def fmt_pct(value):
         return "N/A"
 
 
+# === Sub-widgets ===
+
 class IndicatorPicker(QWidget):
+    """A button with a checklist menu for picking indicators."""
 
     selection_changed = Signal()
 
@@ -238,6 +289,7 @@ class IndicatorPicker(QWidget):
 
 
 class ThumbnailCard(QFrame):
+    """A small card showing one ticker's mini chart and price."""
 
     clicked = Signal(str)
 
@@ -299,7 +351,10 @@ class ThumbnailCard(QFrame):
             )
 
 
+# === Main panels ===
+
 class TopBar(QWidget):
+    """Top bar for entering tickers and picking theme/timezone."""
 
     tickers_applied = Signal(list)
     theme_changed = Signal(str)
@@ -376,6 +431,7 @@ class TopBar(QWidget):
 
 
 class ThumbnailPanel(QScrollArea):
+    """Scrollable list of ThumbnailCards."""
 
     ticker_selected = Signal(str)
 
@@ -429,6 +485,7 @@ class ThumbnailPanel(QScrollArea):
 
 
 class SummaryPanel(QGroupBox):
+    """Shows the selected ticker's price and key stats."""
 
     def __init__(self, parent=None):
         super().__init__("Summary", parent)
@@ -477,6 +534,8 @@ class SummaryPanel(QGroupBox):
 
 @dataclass
 class ChartSettings:
+    """Chart options."""
+
     date_range: str
     interval: str
     chart_type: ChartType
@@ -485,6 +544,10 @@ class ChartSettings:
 
 
 class ChartPanel(QWidget):
+    """
+    Chart settings UI (range, interval, indicators, etc.)
+    and chart display area.
+    """
 
     settings_changed = Signal()
 
@@ -634,6 +697,7 @@ class ChartPanel(QWidget):
 
 
 class NewsPanel(QGroupBox):
+    """Shows recent news for the selected ticker."""
 
     news_requested = Signal()
 
@@ -680,7 +744,13 @@ class NewsPanel(QGroupBox):
         self.browser.setHtml("")
 
 
+# === Main window ===
+
 class StockApp(QMainWindow):
+    """
+    Main window.
+    holds all panels and updates them.
+    """
 
     def __init__(self, config: Config):
         super().__init__()
@@ -984,6 +1054,8 @@ class StockApp(QMainWindow):
 
 
 def main():
+    if not Path("config.json").exists():
+        shutil.copy("config_example.json", "config.json")
     config = Config.load("config.json")
 
     app = QApplication(sys.argv)
