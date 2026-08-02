@@ -1,4 +1,4 @@
-# TikrScope
+# TikrView
 
 A minimal, interactive stock market viewer.  
 
