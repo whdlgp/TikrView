@@ -2,9 +2,11 @@ import sys
 
 import json
 
+import traceback
+
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QAction, QDesktopServices
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
@@ -20,6 +22,35 @@ from core.market_client import get_ticker_data, get_ticker_info
 from core.plot_ticker import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
 from core.stock_indicator import get_price_changes, parse_indicator
 from core.news import TickerNewsClient
+
+
+class WorkerSignals(QObject):
+
+    result = Signal(object)
+    error = Signal(str)
+    finished = Signal()
+
+
+class Worker(QRunnable):
+
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+        except Exception:
+            self.signals.error.emit(traceback.format_exc())
+        else:
+            self.signals.result.emit(result)
+        finally:
+            self.signals.finished.emit()
+
 
 # Selectable UI options
 DATA_RANGE_OPTIONS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"]
@@ -661,6 +692,12 @@ class StockApp(QMainWindow):
         self.timezone = config.timezone
         self.changes_data = []
 
+        self.pool = QThreadPool.globalInstance()
+        self.pool.setMaxThreadCount(4)
+        self._workers = []
+        self._req_token = 0
+        self._chart_token = 0
+
         self.setWindowTitle("TikrView")
         self.resize(config.window_width, config.window_height)
 
@@ -704,6 +741,13 @@ class StockApp(QMainWindow):
 
         self.setCentralWidget(central)
 
+    def run_async(self, fn, callback, *args, **kwargs):
+        worker = Worker(fn, *args, **kwargs)
+        worker.signals.result.connect(callback)
+        worker.signals.finished.connect(lambda: self._workers.remove(worker))
+        self._workers.append(worker)
+        self.pool.start(worker)
+
     def apply_tickers(self, tickers):
         self.thumbnail_panel.set_tickers(tickers)
 
@@ -714,40 +758,50 @@ class StockApp(QMainWindow):
             self.select_ticker(tickers[0])
 
     def refresh_thumbnail(self, ticker):
-        try:
-            info = get_ticker_info(ticker)
-            price = info.get("currentPrice") or info.get("regularMarketPrice")
-            currency = info.get("currency", "")
-            price_text = f"{price:,.2f} {currency}".strip() if price is not None else None
-        except Exception:
-            price_text = None
+        timezone = self.timezone
+        dark_theme = self.dark_theme
 
-        try:
-            fig = plot_ticker_thumbnail(
-                ticker,
-                date_range="5y",
-                time_interval="1mo",
-                timezone=self.timezone,
-                dark_layout=self.dark_theme,
-            )
-            if fig is not None:
-                fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
-                fig.update_xaxes(visible=False)
-                fig.update_yaxes(visible=False)
-                html = fig.to_html(
-                    include_plotlyjs="cdn",
-                    config={"staticPlot": True, "displayModeBar": False},
+        def build():
+            try:
+                info = get_ticker_info(ticker)
+                price = info.get("currentPrice") or info.get("regularMarketPrice")
+                currency = info.get("currency", "")
+                price_text = f"{price:,.2f} {currency}".strip() if price is not None else None
+            except Exception:
+                price_text = None
+
+            try:
+                fig = plot_ticker_thumbnail(
+                    ticker,
+                    date_range="5y",
+                    time_interval="1mo",
+                    timezone=timezone,
+                    dark_layout=dark_theme,
                 )
-                html = html.replace(
-                    "</head>",
-                    "<style>body{background:transparent;margin:0;}</style></head>",
-                )
-            else:
+                if fig is not None:
+                    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+                    fig.update_xaxes(visible=False)
+                    fig.update_yaxes(visible=False)
+                    html = fig.to_html(
+                        include_plotlyjs="cdn",
+                        config={"staticPlot": True, "displayModeBar": False},
+                    )
+                    html = html.replace(
+                        "</head>",
+                        "<style>body{background:transparent;margin:0;}</style></head>",
+                    )
+                else:
+                    html = None
+            except Exception:
                 html = None
-        except Exception:
-            html = None
 
-        self.thumbnail_panel.update_card(ticker, price_text, html)
+            return price_text, html
+
+        def apply(result):
+            price_text, html = result
+            self.thumbnail_panel.update_card(ticker, price_text, html)
+
+        self.run_async(build, apply)
 
     def select_ticker(self, ticker):
         self.current_symbol = ticker
@@ -756,20 +810,31 @@ class StockApp(QMainWindow):
         self.update_chart()
         self.update_summary()
 
-        try:
-            df = get_ticker_data(
-                ticker,
-                date_range="1y",
-                time_interval="1d",
-                timezone=self.timezone,
-            )
-            changes = get_price_changes(df)
-            labels = ["1D", "1W", "1M", "6M", "1Y"]
-            self.changes_data = list(zip(labels, changes))
-        except Exception:
-            self.changes_data = []
+        self._req_token += 1
+        token = self._req_token
+        timezone = self.timezone
 
-        self.chart_panel.render_changes(self.changes_data)
+        def build():
+            try:
+                df = get_ticker_data(
+                    ticker,
+                    date_range="1y",
+                    time_interval="1d",
+                    timezone=timezone,
+                )
+                return get_price_changes(df)
+            except Exception:
+                return None
+
+        def apply(changes):
+            if token != self._req_token:
+                return
+
+            labels = ["1D", "1W", "1M", "6M", "1Y"]
+            self.changes_data = list(zip(labels, changes)) if changes is not None else []
+            self.chart_panel.render_changes(self.changes_data)
+
+        self.run_async(build, apply)
 
         self.news_panel.clear()
 
@@ -778,81 +843,113 @@ class StockApp(QMainWindow):
             return
 
         settings = self.chart_panel.settings()
+        symbol = self.current_symbol
+        timezone = self.timezone
+        dark_theme = self.dark_theme
 
-        try:
-            fig = plot_ticker_chart(
-                ticker=self.current_symbol,
-                date_range=settings.date_range,
-                time_interval=settings.interval,
-                chart_type=settings.chart_type,
-                candle_color=settings.candle_color,
-                indicators=settings.indicators if settings.indicators else None,
-                timezone=self.timezone,
-                dark_layout=self.dark_theme,
-            )
-        except Exception:
-            fig = None
+        self._chart_token += 1
+        token = self._chart_token
 
-        self.chart_panel.render(fig, self.current_symbol)
-        self.chart_panel.render_changes(self.changes_data)
+        def build():
+            try:
+                return plot_ticker_chart(
+                    ticker=symbol,
+                    date_range=settings.date_range,
+                    time_interval=settings.interval,
+                    chart_type=settings.chart_type,
+                    candle_color=settings.candle_color,
+                    indicators=settings.indicators if settings.indicators else None,
+                    timezone=timezone,
+                    dark_layout=dark_theme,
+                )
+            except Exception:
+                return None
+
+        def apply(fig):
+            if token != self._chart_token:
+                return
+
+            self.chart_panel.render(fig, symbol)
+            self.chart_panel.render_changes(self.changes_data)
+
+        self.run_async(build, apply)
 
     def update_summary(self):
         if not self.current_symbol:
             return
 
-        try:
-            info = get_ticker_info(self.current_symbol)
-        except Exception:
-            info = {}
+        symbol = self.current_symbol
 
-        name = info.get("longName") or info.get("shortName") or self.current_symbol
-        price = info.get("currentPrice") or info.get("regularMarketPrice")
-        currency = info.get("currency", "")
-        prev_close = info.get("previousClose")
+        def build():
+            try:
+                return get_ticker_info(symbol)
+            except Exception:
+                return {}
 
-        price_text = f"{price:,.2f} {currency}".strip() if price is not None else "-"
+        def apply(info):
+            if symbol != self.current_symbol:
+                return
 
-        if price is not None and prev_close:
-            day_change = (price - prev_close) / prev_close * 100
-            change_color = "#26a69a" if day_change >= 0 else "#ef5350"
-            change_text = f"Day Change: {fmt_pct(day_change)}"
-        else:
-            change_color = "#888"
-            change_text = "Day Change: N/A"
+            name = info.get("longName") or info.get("shortName") or symbol
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            currency = info.get("currency", "")
+            prev_close = info.get("previousClose")
 
-        pairs = [
-            ("Open", fmt_num(info.get("open"))),
-            ("Prev Close", fmt_num(prev_close)),
-            ("Day Low", fmt_num(info.get("dayLow"))),
-            ("Day High", fmt_num(info.get("dayHigh"))),
-            ("52W Low", fmt_num(info.get("fiftyTwoWeekLow"))),
-            ("52W High", fmt_num(info.get("fiftyTwoWeekHigh"))),
-            ("Volume", fmt_num(info.get("volume") or info.get("regularMarketVolume"))),
-            ("Avg Volume", fmt_num(info.get("averageVolume"))),
-            ("Market Cap", fmt_num(info.get("marketCap"))),
-            ("P/E (TTM)", fmt_num(info.get("trailingPE"))),
-            ("Fwd P/E", fmt_num(info.get("forwardPE"))),
-            ("Div Yield", fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
-        ]
+            price_text = f"{price:,.2f} {currency}".strip() if price is not None else "-"
 
-        self.summary_panel.render(name, price_text, change_text, change_color, pairs)
+            if price is not None and prev_close:
+                day_change = (price - prev_close) / prev_close * 100
+                change_color = "#26a69a" if day_change >= 0 else "#ef5350"
+                change_text = f"Day Change: {fmt_pct(day_change)}"
+            else:
+                change_color = "#888"
+                change_text = "Day Change: N/A"
+
+            pairs = [
+                ("Open", fmt_num(info.get("open"))),
+                ("Prev Close", fmt_num(prev_close)),
+                ("Day Low", fmt_num(info.get("dayLow"))),
+                ("Day High", fmt_num(info.get("dayHigh"))),
+                ("52W Low", fmt_num(info.get("fiftyTwoWeekLow"))),
+                ("52W High", fmt_num(info.get("fiftyTwoWeekHigh"))),
+                ("Volume", fmt_num(info.get("volume") or info.get("regularMarketVolume"))),
+                ("Avg Volume", fmt_num(info.get("averageVolume"))),
+                ("Market Cap", fmt_num(info.get("marketCap"))),
+                ("P/E (TTM)", fmt_num(info.get("trailingPE"))),
+                ("Fwd P/E", fmt_num(info.get("forwardPE"))),
+                ("Div Yield", fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
+            ]
+
+            self.summary_panel.render(name, price_text, change_text, change_color, pairs)
+
+        self.run_async(build, apply)
 
     def load_news(self):
         if not self.current_symbol:
             return
 
+        symbol = self.current_symbol
         self.news_panel.set_loading(True)
 
-        try:
-            with TickerNewsClient() as client:
-                items = client.get_news_for_ticker(self.current_symbol, days=5)
-        except Exception:
-            self.news_panel.show_error()
-            self.news_panel.set_loading(False)
-            return
+        def build():
+            try:
+                with TickerNewsClient() as client:
+                    return client.get_news_for_ticker(symbol, days=5)
+            except Exception:
+                return None
 
-        self.news_panel.show_items(items)
-        self.news_panel.set_loading(False)
+        def apply(items):
+            if symbol != self.current_symbol:
+                return
+
+            if items is None:
+                self.news_panel.show_error()
+            else:
+                self.news_panel.show_items(items)
+
+            self.news_panel.set_loading(False)
+
+        self.run_async(build, apply)
 
     def change_theme(self, theme_name):
         apply_stylesheet(QApplication.instance(), theme=theme_name)
