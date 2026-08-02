@@ -729,9 +729,9 @@ class NewsPanel(QGroupBox):
         for item in items[:15]:
             html_parts.append(
                 f'<p style="margin-bottom: 8px;">'
-                f'<a href="{item["link"]}" style="color: #e0e0e0; text-decoration: none;">'
+                f'<a href="{item["link"]}" style="text-decoration: none;">'
                 f'{item["title"]}</a><br>'
-                f'<small style="color: #888;">'
+                f'<small>'
                 f'{item["published"]:%Y-%m-%d %H:%M}</small>'
                 f'</p>'
             )

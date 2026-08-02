@@ -53,4 +53,6 @@ uv run python dashboard.py
 ## Preview
 
 ![sample_20260802_chart](example_images/example_chart.png)  
-![sample_20260802_news](example_images/example_news.png)
+![sample_20260802_chart_2](example_images/example_chart_2.png)  
+![sample_20260802_news](example_images/example_news.png)  
+![sample_20260802_news_2](example_images/example_news_2.png)
