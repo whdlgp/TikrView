@@ -1,5 +1,5 @@
 # TikrView
-
+![icon](tikrview.ico)  
 A minimal, interactive stock market viewer.  
 
 ## Features
