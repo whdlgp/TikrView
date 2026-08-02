@@ -50,17 +50,28 @@ def plot_ticker_thumbnail(ticker: str, date_range: str, time_interval: str, time
     if df.empty:
         return
 
+    accent_color = "#60a5fa" if dark_layout else "#2563eb"
+    close = df["Close"]
+    margin = (close.max() - close.min()) * 0.1
+
     fig = go.Figure()
 
     fig.add_trace(
         go.Scatter(
             x=df.index,
-            y=df["Close"],
+            y=close,
             mode="lines",
-            line=dict(width=1.5),
+            line=dict(width=1.5, color=accent_color),
+            fill="tozeroy",
+            fillgradient=dict(
+                type="vertical",
+                colorscale=[[0, "rgba(0,0,0,0)"], [1, accent_color]],
+            ),
             showlegend=False,
         )
     )
+
+    fig.update_yaxes(range=[close.min() - margin, close.max() + margin])
 
     if dark_layout:
         to_dark_layout(fig)
