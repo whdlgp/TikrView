@@ -414,11 +414,7 @@ class TopBar(QWidget):
         if not text:
             return
 
-        tickers = [
-            t.strip().upper()
-            for t in text.replace("\n", ",").split(",")
-            if t.strip()
-        ]
+        tickers = [t.strip().upper() for t in text.split(",") if t.strip()]
 
         seen = set()
         unique = []
@@ -1038,12 +1034,15 @@ class StockApp(QMainWindow):
 
     def save_config(self):
         settings = self.chart_panel.settings()
+
+        tickers = [t.strip().upper() for t in self.top_bar.ticker_edit.text().split(",") if t.strip()]
+
         config = Config(
             theme=self.top_bar.theme_combo.currentText(),
             timezone=self.timezone,
             window_width=self.width(),
             window_height=self.height(),
-            tickers=list(self.thumbnail_panel.cards.keys()),
+            tickers=tickers,
             date_range=settings.date_range,
             time_interval=settings.interval,
             chart_type=self.chart_panel.chart_group.checkedButton().text(),
