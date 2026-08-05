@@ -33,7 +33,7 @@ from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QFormLayout, QSplitter, QScrollArea
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QRadioButton, QButtonGroup
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QRadioButton, QButtonGroup, QSpinBox
 from PySide6.QtWidgets import QGroupBox, QFrame, QTabWidget, QTextBrowser, QSizePolicy, QMenu
 
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -702,14 +702,25 @@ class NewsPanel(QGroupBox):
 
         layout = QVBoxLayout(self)
 
+        button_layout = QHBoxLayout()
+
         self.button = QPushButton("Load News")
         self.button.clicked.connect(self.news_requested)
+
+        self.days_spin = QSpinBox()
+        self.days_spin.setRange(1, 365)
+        self.days_spin.setValue(5)
+        self.days_spin.setSuffix(" days")
+
+        button_layout.addWidget(self.button)
+        button_layout.addWidget(self.days_spin)
+        button_layout.addStretch()
 
         self.browser = QTextBrowser()
         self.browser.setOpenLinks(False)
         self.browser.anchorClicked.connect(QDesktopServices.openUrl)
 
-        layout.addWidget(self.button)
+        layout.addLayout(button_layout)
         layout.addWidget(self.browser)
 
         self.news_items = []
@@ -1041,7 +1052,7 @@ class StockApp(QMainWindow):
         def build():
             try:
                 with TickerNewsClient() as client:
-                    return client.get_news_for_ticker(symbol, days=5)
+                    return client.get_news_for_ticker(symbol, days=self.news_panel.days_spin.value())
             except Exception:
                 return None
 
