@@ -29,7 +29,7 @@ import traceback
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal, Slot, QObject, QRunnable, QThreadPool
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QFormLayout, QSplitter, QScrollArea
@@ -712,6 +712,12 @@ class NewsPanel(QGroupBox):
         layout.addWidget(self.button)
         layout.addWidget(self.browser)
 
+        self.news_items = []
+        self.loaded_count = 0
+        self.chunk_size = 30
+
+        self.browser.verticalScrollBar().valueChanged.connect(self.on_news_scroll)
+
     def set_loading(self, loading):
         self.button.setEnabled(not loading)
         self.button.setText("Loading..." if loading else "Load News")
@@ -721,22 +727,57 @@ class NewsPanel(QGroupBox):
             self.browser.setHtml("<p style='color:#888;'><i>No recent news found.</i></p>")
             return
 
+        self.news_items = items
+        self.loaded_count = 0
+
+        end = min(self.chunk_size, len(self.news_items))
+
         html_parts = []
-        for item in items[:15]:
+        for item in self.news_items[:end]:
             html_parts.append(
                 f'<p style="margin-bottom: 8px;">'
                 f'<a href="{item["link"]}" style="text-decoration: none;">'
-                f'{item["title"]}</a><br>'
-                f'<small>'
-                f'{item["published"]:%Y-%m-%d %H:%M}</small>'
+                f'({item["query"]}) {item["title"]}</a><br>'
+                f'<small>{item["published"]:%Y-%m-%d %H:%M}</small>'
                 f'</p>'
             )
+
         self.browser.setHtml("".join(html_parts))
+        self.loaded_count = end
+
+    def on_news_scroll(self, value):
+        bar = self.browser.verticalScrollBar()
+
+        if value < bar.maximum() - 100:
+            return
+
+        if self.loaded_count >= len(self.news_items):
+            return
+
+        end = min(self.loaded_count + self.chunk_size, len(self.news_items))
+
+        html_parts = []
+        for item in self.news_items[self.loaded_count:end]:
+            html_parts.append(
+                f'<p style="margin-bottom: 8px;">'
+                f'<a href="{item["link"]}" style="text-decoration: none;">'
+                f'({item["query"]}) {item["title"]}</a><br>'
+                f'<small>{item["published"]:%Y-%m-%d %H:%M}</small>'
+                f'</p>'
+            )
+
+        cursor = self.browser.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertHtml("".join(html_parts))
+
+        self.loaded_count = end
 
     def show_error(self):
         self.browser.setHtml("<p style='color:#ef5350;'><i>Failed to load news.</i></p>")
 
     def clear(self):
+        self.news_items = []
+        self.loaded_count = 0
         self.browser.setHtml("")
 
 
