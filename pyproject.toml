@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cachetools>=7.1.6",
     "feedparser>=6.0.12",
-    "pandas-ta>=0.4.71b0",
+    "pandas-ta-classic>=0.6.52",
     "plotly>=6.9.0",
     "pyside6>=6.11.1",
     "pywebview>=6.2.1",

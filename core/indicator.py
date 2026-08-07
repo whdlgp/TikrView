@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta_classic as ta
 from abc import ABC, abstractmethod
 from enum import Enum
 
@@ -130,9 +130,9 @@ class BollingerBands(Indicator):
         bb = ta.bbands(df["Close"], length=self.period, std=self.std)
 
         return {
-            "BB\u2193": bb[f"BBL_{self.period}_{self.std}_{self.std}"],
-            "BB": bb[f"BBM_{self.period}_{self.std}_{self.std}"],
-            "BB\u2191": bb[f"BBU_{self.period}_{self.std}_{self.std}"],
+            "BB↓": bb[f"BBL_{self.period}_{self.std}"],
+            "BB":  bb[f"BBM_{self.period}_{self.std}"],
+            "BB↑": bb[f"BBU_{self.period}_{self.std}"],
         }
 
 
@@ -150,6 +150,12 @@ class SuperTrend(Indicator):
 
     def calc(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         st = ta.supertrend(df["High"], df["Low"], df["Close"], length=self.period, multiplier=self.multiplier)
+
+        # Change initial value from 0 to NaN.
+        col = f"SUPERT_{self.period}_{self.multiplier}"
+        idx = st.columns.get_loc(col)
+        if not st.empty and st.iat[0, idx] == 0:
+            st.iat[0, idx] = pd.NA
 
         return {"S-Trend": st[f"SUPERT_{self.period}_{self.multiplier}"]}
 
