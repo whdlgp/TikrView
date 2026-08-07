@@ -2,8 +2,8 @@ import pandas as pd
 
 from core.market import get_ticker_data
 from core.indicator import get_price_changes
-from core.indicator import SMA, AnchoredVWAP, KAMA, BollingerBands, SuperTrend
-from core.indicator import WilliamsR, MFI, StochRSI, FisherTransform, MACD, ADX, ATR
+from imple.indicator.classic import SMA, AnchoredVWAP, KAMA, BollingerBands, SuperTrend
+from imple.indicator.classic import WilliamsR, MFI, StochRSI, FisherTransform, MACD, ADX, ATR
 
 
 def demo_indicator():

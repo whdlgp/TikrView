@@ -42,8 +42,10 @@ from qt_material import apply_stylesheet, list_themes
 
 from core.market import get_ticker_data, get_ticker_info
 from core.plot import ChartType, CandleColor, plot_ticker_chart, plot_ticker_thumbnail
-from core.indicator import get_price_changes, parse_indicator
+from core.indicator import get_price_changes
 from core.news import TickerNewsClient
+
+from imple.indicator.helper import parse_indicator
 
 
 # === Background threading ===

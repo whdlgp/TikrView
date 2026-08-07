@@ -1,4 +1,4 @@
-from core.indicator import SMA, MACD
+from imple.indicator.classic import SMA, MACD
 from core.plot import plot_ticker_thumbnail, plot_ticker_chart
 
 
