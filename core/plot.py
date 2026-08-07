@@ -133,8 +133,11 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
     sub_indicators = [ind for ind in indicators if ind.panel == Panel.SUB]
 
     n_sub = len(sub_indicators)
-    rows = 1 + n_sub
-    row_heights = [0.75] + [0.25 / n_sub] * n_sub if n_sub else [1.0]
+    rows = 2 + n_sub  # main + volume + sub
+    volume_height = 0.15
+    main_height = 0.85 - (0.25 if n_sub else 0)
+    sub_height = 0.25 / n_sub if n_sub else 0
+    row_heights = [main_height, volume_height] + [sub_height] * n_sub
 
     info = get_ticker_info(ticker)
     full_name = info.get("longName") or info.get("shortName")
@@ -147,7 +150,7 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
     else:
         main_title = f"<b>{ticker}</b>"
 
-    sub_titles = [main_title] + [ind.display_name for ind in sub_indicators]
+    sub_titles = [main_title, "Volume"] + [ind.display_name for ind in sub_indicators]
 
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, row_heights=row_heights, vertical_spacing=0.04, subplot_titles=sub_titles)
 
@@ -198,8 +201,23 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
                 row=1, col=1,
             )
 
+    volume_colors = [
+        up_color if c >= o else down_color
+        for o, c in zip(df["Open"], df["Close"])
+    ]
+    fig.add_trace(
+        go.Bar(
+            x=df.index,
+            y=df["Volume"],
+            marker_color=volume_colors,
+            name="Volume",
+            showlegend=False,
+        ),
+        row=2, col=1,
+    )
+
     for i, ind in enumerate(sub_indicators):
-        panel_row = 2 + i
+        panel_row = 3 + i
 
         values = ind.calc(df)
 
