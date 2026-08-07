@@ -1040,6 +1040,16 @@ class StockApp(QMainWindow):
                 ("Div Yield", fmt_pct(info.get("dividendYield")) if info.get("dividendYield") is not None else "N/A"),
             ]
 
+            dividends = info.dividends
+            if dividends is not None and not dividends.empty:
+                pairs.append(("Div Date", "YY-MM-DD"))
+                recent_dividends = dividends.tail(8).iloc[::-1]
+                for i, (date, value) in enumerate(recent_dividends.items(), 1):
+                    pairs.append((
+                        f"Div #{i}",
+                        f"{date:%y-%m-%d} ({fmt_num(value)} {currency})",
+                    ))
+
             self.summary_panel.render(name, price_text, change_text, change_color, pairs)
 
         self.run_async(build, apply)

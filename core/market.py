@@ -9,6 +9,15 @@ info_lock = Lock()
 data_lock = Lock()
 
 
+class TickerInfo(dict):
+    """Extended Yahoo Finance info."""
+
+    def __init__(self, info: dict):
+        super().__init__(info)
+
+    dividends: pd.Series | None
+
+
 @cached(cache=info_cache, lock=info_lock)
 def get_ticker_info(ticker_name: str) -> dict:
     """
@@ -18,7 +27,7 @@ def get_ticker_info(ticker_name: str) -> dict:
         ticker_name (str): stock ticker symbol (e.g. "AGNC", "AAPL")
 
     Returns:
-        dict: ticker info with keys.
+        TickerInfo: dict-like ticker info with additional attributes.
 
     Note:
         - Use dict.copy() before modifying to avoid mutating the cache.
@@ -60,9 +69,17 @@ def get_ticker_info(ticker_name: str) -> dict:
             - auditRisk, boardRisk, compensationRisk, shareHolderRightsRisk, overallRisk
         - address
             - address1, address2, city, state, zip, country, phone, fax, website
+        - extended
+            - dividends: dividend history (pd.Series)
     """
     ticker_obj = yf.Ticker(ticker_name)
-    info = ticker_obj.info
+
+    info = TickerInfo(ticker_obj.info)
+
+    try:
+        info.dividends = ticker_obj.dividends
+    except Exception:
+        info.dividends = None
 
     return info
 
