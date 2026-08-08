@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cachetools>=7.1.7",
     "chronos-forecasting>=2.0",
+    "feedparser>=6.0.12",
     "kronos-model-arch>=0.1.0",
     "pandas-ta-classic>=0.6.52",
     "pandas[pyarrow]>=3.0.5",
