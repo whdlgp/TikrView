@@ -1,9 +1,11 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.express as px
 from enum import Enum
 
 from .market import get_ticker_data, get_ticker_info
 from .indicator import Panel, Indicator
+from .forecaster import Forecaster
 
 
 def to_dark_layout(fig, title=None):
@@ -102,7 +104,12 @@ class CandleColor(Enum):
     BLACK_GRAY = ("#000000", "#757575")
 
 
-def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone: str="Asia/Seoul", chart_type: ChartType=ChartType.CANDLE, candle_color: CandleColor = CandleColor.GREEN_RED, indicators: list[Indicator] | None=None, dark_layout: bool=True) -> go.Figure | None:
+def plot_ticker_chart(
+    ticker: str, date_range: str, time_interval: str, timezone: str="Asia/Seoul",
+    chart_type: ChartType=ChartType.CANDLE, candle_color: CandleColor = CandleColor.GREEN_RED,
+    indicators: list[Indicator] | None=None, forecasters: list[Forecaster] | None=None,
+    dark_layout: bool=True
+) -> go.Figure | None:
     """
     Create a price chart for a ticker with optional technical indicators.
 
@@ -185,6 +192,36 @@ def plot_ticker_chart(ticker: str, date_range: str, time_interval: str, timezone
 
     else:
         raise ValueError(f"Unsupported chart type: {chart_type}")
+
+    palette = px.colors.qualitative.Plotly
+    for i, forecaster in enumerate(forecasters or []):
+        color = palette[i % len(palette)]
+        result = forecaster.calc(df)
+
+        fig.add_trace(
+            go.Scatter(
+                x=list(result.index) + list(result.index[::-1]),
+                y=list(result["upper"]) + list(result["lower"][::-1]),
+                fill="toself",
+                fillcolor=color,
+                opacity=0.15,
+                line=dict(color="rgba(0,0,0,0)"),
+                hoverinfo="skip",
+                showlegend=False,
+            ),
+            row=1, col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=result.index,
+                y=result["median"],
+                mode="lines",
+                name=f"{forecaster.display_name}",
+                line=dict(color=color, width=1.3, dash="dash"),
+            ),
+            row=1, col=1,
+        )
 
     for ind in main_indicators:
         values = ind.calc(df)

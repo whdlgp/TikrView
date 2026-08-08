@@ -1,10 +1,3 @@
-import os
-
-model_path = os.path.join(os.path.abspath(os.getcwd()), "models")
-os.environ["HF_HOME"] = model_path
-os.environ["HF_HUB_CACHE"] = os.path.join(model_path, "hub")
-
-
 from core.market import get_ticker_data, get_ticker_info
 from imple.forecaster.kronosbase import KronosBase
 from imple.forecaster.chronos2 import Chronos2

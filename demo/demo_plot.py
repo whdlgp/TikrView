@@ -1,4 +1,5 @@
 from imple.indicator.classic import SMA, MACD
+from imple.forecaster.timesfm import TimesFM
 from core.plot import plot_ticker_thumbnail, plot_ticker_chart
 
 
@@ -16,6 +17,9 @@ def demo_chart():
             SMA(20),
             MACD(),
         ],
+        forecasters=[
+            TimesFM(30),
+        ]
     )
     fig.show()
 
