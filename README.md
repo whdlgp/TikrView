@@ -6,7 +6,8 @@ A minimal, interactive stock market viewer.
 
 - Summary of stock and ETFs  
 - Line and candlestick chart views  
-- Support for multiple indicators (e.g., SMA, AVWAP, Williams %R, Stochastic RSI, KAMA, Fisher)  
+- Support for multiple indicators (e.g., SMA, AVWAP, Williams %R, Stochastic RSI, KAMA, Fisher)
+- Support for multiple Forecaster (e.g., Chronos2, Timesfm, kronos)
 - News search for stock and ETFs (Note. experimental)  
 - Customizable configuration (time range, timezone, theme, etc.)  
 - Chart thumbnail previews  
