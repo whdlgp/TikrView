@@ -28,7 +28,7 @@ import traceback
 
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt, Signal, Slot, QObject, QRunnable, QThreadPool
+from PySide6.QtCore import Qt, Signal, Slot, QObject, QRunnable, QThreadPool, QEvent
 from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
@@ -253,6 +253,7 @@ class IndicatorPicker(QWidget):
         self.button.clicked.connect(self.show_menu)
 
         self.menu = QMenu(self)
+        self.menu.installEventFilter(self)
         self.actions = {}
 
         for label, value in INDICATOR_OPTIONS:
@@ -269,10 +270,19 @@ class IndicatorPicker(QWidget):
         self.menu.exec(
             self.button.mapToGlobal(self.button.rect().bottomLeft())
         )
+        self.selection_changed.emit()
 
     def toggled(self):
         self.update_label()
-        self.selection_changed.emit()
+
+    def eventFilter(self, obj, event):
+        if obj is self.menu and event.type() == QEvent.Type.MouseButtonRelease:
+            action = self.menu.actionAt(event.position().toPoint())
+            if action is not None and action.isCheckable():
+                action.setChecked(not action.isChecked())
+                return True
+
+        return super().eventFilter(obj, event)
 
     def update_label(self):
         selected = self.selected_values()
