@@ -33,6 +33,9 @@ htmlcov/
 # Config file
 config.json
 
+# Huggingface models
+models/
+
 # Misc
 *.lnk
 *.vbs
