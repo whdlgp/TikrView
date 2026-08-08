@@ -46,6 +46,7 @@ from core.indicator import get_price_changes
 from core.news import TickerNewsClient
 
 from imple.indicator.helper import parse_indicator
+from imple.forecaster.helper import parse_forecaster
 
 
 # === Background threading ===
@@ -126,6 +127,27 @@ INDICATOR_OPTIONS = [
     ("MACD (12,26,9)", "MACD:12,26,9"),
     ("ADX (14)", "ADX:14"),
 ]
+FORECASTER_OPTIONS = [
+    # TimesFM 2.5
+    ("TimesFM 2.5 (7d)", "TimesFM:7"),
+    ("TimesFM 2.5 (14d)", "TimesFM:14"),
+    ("TimesFM 2.5 (30d)", "TimesFM:30"),
+    ("TimesFM 2.5 (60d)", "TimesFM:60"),
+
+    # Chronos-2
+    ("Chronos-2 (7d)", "Chronos2:7"),
+    ("Chronos-2 (14d)", "Chronos2:14"),
+    ("Chronos-2 (30d)", "Chronos2:30"),
+    ("Chronos-2 (60d)", "Chronos2:60"),
+
+    # Kronos-base
+    ("Kronos-base (30d)", "Kronos:30"),
+    ("Kronos-base (60d)", "Kronos:60"),
+    ("Kronos-base (30d, fast)", "Kronos:30,400,10,1.0,0.9"),
+    ("Kronos-base (30d, conservative)", "Kronos:30,400,30,0.5,0.7"),
+    ("Kronos-base (30d, creative)", "Kronos:30,400,30,1.3,0.95"),
+    ("Kronos-base (30d, long lookback)", "Kronos:30,800,30,1.0,0.9"),
+]
 
 
 # === Default values ===
@@ -146,6 +168,7 @@ DEFAULT_TICKERS = [
     "GLD",        # Gold
 ]
 DEFAULT_INDICATORS = ["SMA:20", "SMA:60", "VWAP"]
+DEFAULT_FORECASTERS = []
 
 
 # === Config ===
@@ -164,6 +187,7 @@ class Config:
     chart_type: str = "Candlestick"
     candle_color: str = "Green_Red"
     indicators: list = field(default_factory=lambda: DEFAULT_INDICATORS.copy())
+    forecasters: list = field(default_factory=lambda: DEFAULT_FORECASTERS.copy())
 
     @classmethod
     def load(cls, path="config.json"):
@@ -181,6 +205,7 @@ class Config:
             chart_type=data.get("chart_type", "Candlestick"),
             candle_color=data.get("candle_color", "Green_Red"),
             indicators=data.get("indicators", DEFAULT_INDICATORS),
+            forecasters=data.get("forecasters", DEFAULT_FORECASTERS),
         )
 
     def save(self, path="config.json"):
@@ -195,6 +220,7 @@ class Config:
             "chart_type": self.chart_type,
             "candle_color": self.candle_color,
             "indicators": self.indicators,
+            "forecasters": self.forecasters,
         }
         with open(path, "w") as config_file:
             json.dump(data, config_file, indent=4)
@@ -290,6 +316,68 @@ class IndicatorPicker(QWidget):
             self.button.setText(", ".join(selected))
         else:
             self.button.setText("Indicators...")
+
+    def selected_values(self):
+        return [a.data() for a in self.actions.values() if a.isChecked()]
+
+    def set_selected(self, values):
+        for v, a in self.actions.items():
+            a.setChecked(v in values)
+        self.update_label()
+
+
+class ForecasterPicker(QWidget):
+    """A button with a checklist menu for picking forecasters."""
+
+    selection_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.button = QPushButton("Forecasters...")
+        self.button.clicked.connect(self.show_menu)
+
+        self.menu = QMenu(self)
+        self.menu.installEventFilter(self)
+        self.actions = {}
+
+        for label, value in FORECASTER_OPTIONS:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setData(value)
+            action.toggled.connect(self.toggled)
+            self.menu.addAction(action)
+            self.actions[value] = action
+
+        layout.addWidget(self.button)
+
+    def show_menu(self):
+        self.menu.exec(
+            self.button.mapToGlobal(self.button.rect().bottomLeft())
+        )
+        self.selection_changed.emit()
+
+    def toggled(self):
+        self.update_label()
+
+    def eventFilter(self, obj, event):
+        if obj is self.menu and event.type() == QEvent.Type.MouseButtonRelease:
+            action = self.menu.actionAt(event.position().toPoint())
+            if action is not None and action.isCheckable():
+                action.setChecked(not action.isChecked())
+                return True
+
+        return super().eventFilter(obj, event)
+
+    def update_label(self):
+        selected = self.selected_values()
+        if selected:
+            self.button.setText(", ".join(selected))
+        else:
+            self.button.setText("Forecasters...")
 
     def selected_values(self):
         return [a.data() for a in self.actions.values() if a.isChecked()]
@@ -558,6 +646,7 @@ class ChartPanel(QWidget):
     """
 
     settings_changed = Signal()
+    forecaster_apply_requested = Signal()
 
     def __init__(self, config, summary_panel, parent=None):
         super().__init__(parent)
@@ -590,6 +679,7 @@ class ChartPanel(QWidget):
         interval_idx = TIME_INTERVAL_OPTIONS.index(config.time_interval)
         self.interval_group.buttons()[interval_idx].setChecked(True)
         self.interval_group.buttonClicked.connect(self.settings_changed)
+        self.interval_group.buttonClicked.connect(self.update_forecaster_availability)
         interval_row.addStretch()
         controls.addLayout(interval_row)
 
@@ -621,6 +711,26 @@ class ChartPanel(QWidget):
         type_row.addWidget(self.indicator_picker)
         type_row.addStretch()
         controls.addLayout(type_row)
+
+        forecaster_row = QHBoxLayout()
+        forecaster_row.addWidget(QLabel("Forecasters:"))
+
+        self.forecaster_picker = ForecasterPicker()
+        self.forecaster_picker.set_selected(config.forecasters)
+        forecaster_row.addWidget(self.forecaster_picker)
+
+        self.forecaster_apply_button = QPushButton("Apply")
+        self.forecaster_apply_button.clicked.connect(self.forecaster_apply_requested)
+        forecaster_row.addWidget(self.forecaster_apply_button)
+
+        self.forecaster_status_label = QLabel("")
+        self.forecaster_status_label.setStyleSheet("color: #888;")
+        forecaster_row.addWidget(self.forecaster_status_label)
+
+        forecaster_row.addStretch()
+        controls.addLayout(forecaster_row)
+
+        self.update_forecaster_availability()
 
         self.changes_widget = QWidget()
         self.changes_layout = QHBoxLayout(self.changes_widget)
@@ -702,6 +812,32 @@ class ChartPanel(QWidget):
             self.changes_layout.addWidget(lbl)
 
         self.changes_layout.addStretch()
+    
+    def set_forecaster_busy(self, busy):
+        if busy:
+            self.forecaster_apply_button.setEnabled(False)
+            self.forecaster_picker.setEnabled(False)
+            self.forecaster_apply_button.setText("Calculating...")
+            self.forecaster_status_label.setText(
+                "Forecasting... (first run may take a while, loading model)"
+            )
+        else:
+            self.forecaster_apply_button.setText("Apply")
+            self.update_forecaster_availability() 
+
+    def update_forecaster_availability(self):
+        interval = self.interval_group.checkedButton().text()
+        available = interval == "1d"
+
+        self.forecaster_picker.setEnabled(available)
+        self.forecaster_apply_button.setEnabled(available)
+
+        if available:
+            self.forecaster_status_label.setText("")
+        else:
+            self.forecaster_status_label.setText(
+                "Forecasters are only available when Interval is set to 1d."
+            )
 
 
 class NewsPanel(QGroupBox):
@@ -850,6 +986,7 @@ class StockApp(QMainWindow):
 
         self.chart_panel = ChartPanel(self.config, self.summary_panel)
         self.chart_panel.settings_changed.connect(self.update_chart)
+        self.chart_panel.forecaster_apply_requested.connect(self.apply_forecasters)
 
         self.news_panel = NewsPanel()
         self.news_panel.news_requested.connect(self.load_news)
@@ -871,10 +1008,12 @@ class StockApp(QMainWindow):
 
         self.setCentralWidget(central)
 
-    def run_async(self, fn, callback, *args, **kwargs):
+    def run_async(self, fn, callback, *args, on_finished=None, **kwargs):
         worker = Worker(fn, *args, **kwargs)
         worker.signals.result.connect(callback)
         worker.signals.finished.connect(lambda: self._workers.remove(worker))
+        if on_finished is not None:
+            worker.signals.finished.connect(on_finished)   # 추가
         self._workers.append(worker)
         self.pool.start(worker)
 
@@ -968,7 +1107,7 @@ class StockApp(QMainWindow):
 
         self.news_panel.clear()
 
-    def update_chart(self):
+    def update_chart(self, forecaster_specs=None, on_done=None):
         if not self.current_symbol:
             return
 
@@ -982,6 +1121,15 @@ class StockApp(QMainWindow):
 
         def build():
             try:
+                forecasters = None
+                if forecaster_specs:
+                    forecasters = []
+                    for spec in forecaster_specs:
+                        try:
+                            forecasters.append(parse_forecaster(spec))
+                        except ValueError:
+                            pass
+                
                 return plot_ticker_chart(
                     ticker=symbol,
                     date_range=settings.date_range,
@@ -989,6 +1137,7 @@ class StockApp(QMainWindow):
                     chart_type=settings.chart_type,
                     candle_color=settings.candle_color,
                     indicators=settings.indicators if settings.indicators else None,
+                    forecasters=forecasters if forecasters else None,
                     timezone=timezone,
                     dark_layout=dark_theme,
                 )
@@ -1002,7 +1151,17 @@ class StockApp(QMainWindow):
             self.chart_panel.render(fig, symbol)
             self.chart_panel.render_changes(self.changes_data)
 
-        self.run_async(build, apply)
+        self.run_async(build, apply, on_finished=on_done)
+
+    def apply_forecasters(self):
+        if self.chart_panel.interval_group.checkedButton().text() != "1d":
+            return
+        specs = self.chart_panel.forecaster_picker.selected_values()
+        self.chart_panel.set_forecaster_busy(True)
+        self.update_chart(
+            forecaster_specs=specs,
+            on_done=lambda: self.chart_panel.set_forecaster_busy(False),
+        )
 
     def update_summary(self):
         if not self.current_symbol:
@@ -1122,6 +1281,7 @@ class StockApp(QMainWindow):
             chart_type=self.chart_panel.chart_group.checkedButton().text(),
             candle_color=self.chart_panel.color_combo.currentText(),
             indicators=self.chart_panel.indicator_picker.selected_values(),
+            forecasters=self.chart_panel.forecaster_picker.selected_values(),
         )
         config.save()
 

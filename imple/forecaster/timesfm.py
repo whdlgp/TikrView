@@ -22,7 +22,7 @@ class TimesFM(Forecaster):
 
     @property
     def display_name(self) -> str:
-        return "TimesFM 2.5"
+        return f"TimesFM 2.5 ({self.pred_len})"
 
     def calc(self, df: pd.DataFrame) -> pd.DataFrame:
         close = df["Close"].to_numpy()

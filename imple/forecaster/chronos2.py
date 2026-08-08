@@ -13,7 +13,7 @@ class Chronos2(Forecaster):
 
     @property
     def display_name(self) -> str:
-        return "Chronos-2"
+        return f"Chronos-2 ({self.pred_len})"
 
     def calc(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()

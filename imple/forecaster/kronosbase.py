@@ -21,7 +21,19 @@ class KronosBase(Forecaster):
 
     @property
     def display_name(self) -> str:
-        return "Kronos-base"
+        extras = []
+        if self.lookback != 400:
+            extras.append(f"lb{self.lookback}")
+        if self.n_samples != 30:
+            extras.append(f"n{self.n_samples}")
+        if self.temperature != 1.0:
+            extras.append(f"T{self.temperature}")
+        if self.top_p != 0.9:
+            extras.append(f"p{self.top_p}")
+
+        if extras:
+            return f"Kronos-base ({self.pred_len}, {'/'.join(extras)})"
+        return f"Kronos-base ({self.pred_len})"
 
     def calc(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.reset_index()
