@@ -146,7 +146,7 @@ FORECASTER_OPTIONS = [
     ("Kronos-base (30d, fast)", "Kronos:30,400,10,1.0,0.9"),
     ("Kronos-base (30d, conservative)", "Kronos:30,400,30,0.5,0.7"),
     ("Kronos-base (30d, creative)", "Kronos:30,400,30,1.3,0.95"),
-    ("Kronos-base (30d, long lookback)", "Kronos:30,800,30,1.0,0.9"),
+    ("Kronos-base (30d, long lookback)", "Kronos:30,480,30,1.0,0.9"),
 ]
 
 

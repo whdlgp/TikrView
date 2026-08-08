@@ -8,8 +8,11 @@ class Chronos2(Forecaster):
     def __init__(self, pred_len: int):
         self.pred_len = pred_len
 
-        device_map = "cuda" if torch.cuda.is_available() else "cpu"
-        self.pipeline = Chronos2Pipeline.from_pretrained("amazon/chronos-2", device_map=device_map)
+        self.pipeline = self.get_cached_model("chronos-2")
+        if self.pipeline is None:
+            device_map = "cuda" if torch.cuda.is_available() else "cpu"
+            self.pipeline = Chronos2Pipeline.from_pretrained("amazon/chronos-2", device_map=device_map)
+            self.cache_model("chronos-2", self.pipeline)
 
     @property
     def display_name(self) -> str:

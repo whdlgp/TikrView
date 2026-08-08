@@ -7,18 +7,21 @@ class TimesFM(Forecaster):
     def __init__(self, pred_len: int):
         self.pred_len = pred_len
 
-        self.model = timesfm.TimesFM_2p5_200M_torch.from_pretrained("google/timesfm-2.5-200m-pytorch")
-        self.model.compile(
-            timesfm.ForecastConfig(
-                max_context=1024,
-                max_horizon=256,
-                normalize_inputs=True,
-                use_continuous_quantile_head=True,
-                force_flip_invariance=True,
-                infer_is_positive=True,
-                fix_quantile_crossing=True,
+        self.model = self.get_cached_model("timesfm-2.5-200m")
+        if self.model is None:
+            self.model = timesfm.TimesFM_2p5_200M_torch.from_pretrained("google/timesfm-2.5-200m-pytorch")
+            self.model.compile(
+                timesfm.ForecastConfig(
+                    max_context=1024,
+                    max_horizon=256,
+                    normalize_inputs=True,
+                    use_continuous_quantile_head=True,
+                    force_flip_invariance=True,
+                    infer_is_positive=True,
+                    fix_quantile_crossing=True,
+                )
             )
-        )
+            self.cache_model("timesfm-2.5-200m", self.model)
 
     @property
     def display_name(self) -> str:

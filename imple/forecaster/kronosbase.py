@@ -14,10 +14,13 @@ class KronosBase(Forecaster):
         self.temperature = temperature
         self.top_p = top_p
 
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        tokenizer = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base")
-        model = Kronos.from_pretrained("NeoQuasar/Kronos-base")
-        self.predictor = KronosPredictor(model, tokenizer, device=device, max_context=512)
+        self.predictor = self.get_cached_model("kronos-base")
+        if self.predictor is None:
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            tokenizer = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base")
+            model = Kronos.from_pretrained("NeoQuasar/Kronos-base")
+            self.predictor = KronosPredictor(model, tokenizer, device=device, max_context=512)
+            self.cache_model("kronos-base", self.predictor)
 
     @property
     def display_name(self) -> str:
